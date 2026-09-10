@@ -92,24 +92,102 @@
   });
 
   /* ═══ 01 문서 → 온톨로지 ═══════════════════════════════════════════
-     오른쪽 그래프는 02 와 같은 실제 부분 그래프다. 여기서는 읽는 대상이 아니라
-     "이만큼이 관계로 묶여 나온다"를 보이는 자리이므로 커서 판독을 켜지 않는다.
-     시트가 그래프 가운데로 빨려 들어가므로 평면(2D)으로 둔다 — 회전하는 구
-     위로 시트가 지나가면 어디로 들어가는지가 흐려진다. */
+     문서가 세 레이어(TBox · RBox · ABox)를 지나고, 그 뒤에서 온톨로지가
+     자라난다. 자라는 것은 그림이 아니라 실제 부분 그래프다 — graph.js 의
+     setBuild(p) 가 진행률만큼만 그린다.
+
+     레이어를 켜는 순서와 노드가 나오는 순서를 한 타임라인에 묶었다.
+       0.00 ~ 0.10   TBox 켜짐  (클래스 목록을 세운다)
+       0.10 ~ 0.20   RBox 켜짐  (관계 속성을 세운다)
+       0.20 ~ 1.00   ABox 켜짐  · 노드와 엣지가 이 구간에서 쌓인다
+
+     한 번 다 자라면 그대로 둔다. 계속 지웠다 다시 만들면 온톨로지가 사라지는
+     것처럼 보인다. 화면을 벗어났다 돌아오면 처음부터 다시 자란다. */
   var ingGraph = null;
+
+  /* 지금까지 그려진 개수. register 보다 먼저 선언해야 한다 — var 는 끌어올려지되
+     값은 대입 시점에 들어가므로, 아래에 두면 첫 렌더에서 undefined 가 찍힌다
+     (실제로 "노드 undefined · 엣지 undefined" 로 나왔다). */
+  var ingBuiltN = 0, ingBuiltE = 0;
+
+  register(function ingCount() {
+    var out = el('ingCount');
+    if (!out || typeof GRAPH === 'undefined') return;
+    out.dataset.tpl = lang() === 'ko' ? '노드 %N · 엣지 %E' : '%N nodes · %E edges';
+    ingPaintCount(ingBuiltN, ingBuiltE);
+  });
+  function ingPaintCount(n, e) {
+    var out = el('ingCount');
+    if (!out) return;
+    var tpl = out.dataset.tpl || '노드 %N · 엣지 %E';
+    out.innerHTML = tpl.replace('%N', '<b>' + fmt(n) + '</b>')
+                       .replace('%E', '<b>' + fmt(e) + '</b>');
+  }
+
+  /* 진행률에 해당하는 노드·엣지 수. 화면의 숫자가 실제로 그려진 개수와
+     같아야 한다 — 어림수를 적으면 그림과 글이 어긋난다. */
+  function ingCountAt(p) {
+    if (typeof GRAPH === 'undefined' || !ingGraph) return [0, 0];
+    var N = GRAPH.nodes.length;
+    var cut = Math.round(p * N);
+    var rank = ingGraph.buildRank;
+    if (!rank) return [cut, 0];
+    var e = 0, E = GRAPH.edges;
+    for (var i = 0; i < E.length; i++) {
+      if (rank[E[i][0]] < cut && rank[E[i][1]] < cut) e++;
+    }
+    return [cut, e];
+  }
 
   register(function ingest() {
     var stage = el('ingStage');
     if (!stage || stage.dataset.wired) return;
     stage.dataset.wired = '1';
 
-    /* 화면에 들어올 때만 돌린다. 지나간 자리에서 혼자 돌면 프레임만 쓴다. */
+    var gates = [el('gateT'), el('gateR'), el('gateA')];
+    var timer = null, t0 = 0;
+    var DUR = 11000;   /* 다 자라는 데 걸리는 시간. 시트 흐름(4.4초)과 맞춘다 */
+
+    function step() {
+      var p = Math.min(1, (Date.now() - t0) / DUR);
+      /* 레이어 — 진행률에 따라 차례로 켜진다 */
+      if (gates[0]) gates[0].classList.toggle('is-on', p > 0.02);
+      if (gates[1]) gates[1].classList.toggle('is-on', p > 0.10);
+      if (gates[2]) gates[2].classList.toggle('is-on', p > 0.20);
+
+      /* 노드는 ABox 가 켜진 뒤부터 쌓인다 */
+      var g = p <= 0.20 ? 0 : (p - 0.20) / 0.80;
+      if (ingGraph) ingGraph.setBuild(g);
+      var c = ingCountAt(g);
+      if (c[0] !== ingBuiltN || c[1] !== ingBuiltE) {
+        ingBuiltN = c[0]; ingBuiltE = c[1];
+        ingPaintCount(ingBuiltN, ingBuiltE);
+      }
+      if (p < 1) timer = setTimeout(step, reduced ? 400 : 90);
+      else timer = null;
+    }
+
+    function play() {
+      if (timer !== null) return;
+      /* 이미 다 자랐으면 다시 자라게 하지 않는다 */
+      if (ingBuiltN >= (GRAPH ? GRAPH.nodes.length : 0)) return;
+      t0 = Date.now();
+      step();
+    }
+    function pause() {
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+    }
+
     if (window.IntersectionObserver) {
       new IntersectionObserver(function (ens) {
-        ens.forEach(function (e) { stage.classList.toggle('is-on', e.isIntersecting); });
+        ens.forEach(function (e) {
+          stage.classList.toggle('is-on', e.isIntersecting);
+          if (e.isIntersecting) play(); else pause();
+        });
       }, { threshold: 0.15 }).observe(stage);
     } else {
       stage.classList.add('is-on');
+      play();
     }
   });
 
@@ -548,7 +626,9 @@
     if (hero) OG.create(hero, { mode: 'hero', threeD: true });
 
     var ingCanvas = el('ingGraph');
-    if (ingCanvas) ingGraph = OG.create(ingCanvas, { threeD: false });
+    /* 3D 구면 배치로 세운다. 생성 모드(build)라 처음에는 아무것도 없고,
+       진행률에 따라 가운데에서 바깥으로 자란다. */
+    if (ingCanvas) ingGraph = OG.create(ingCanvas, { threeD: true, build: true });
 
     var exCanvas = el('mapGraph');
     if (exCanvas) {

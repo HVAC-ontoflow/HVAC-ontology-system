@@ -106,6 +106,35 @@
        질의응답에서 답이 되는 노드만 밝히는 데 필요하다. hover 와 같은
        집합(hoverEdges · hoverNodes)을 재사용하므로 그리는 코드는 그대로다. */
     var focused = false;
+
+    /* ── 점진적 생성 ──
+       bCut 은 지금 몇 개까지 보이는지다(노드 개수). 1 이 아니라 개수로 두는
+       것은, 진행률을 개수로 환산해 두면 엣지 판정이 비교 한 번으로 끝나기
+       때문이다.
+
+       순서는 손으로 적지 않고 데이터에서 뽑는다 — 클래스 띠(설비 → 근거·계산
+       → 부품·공간 → 값 → 출처) 순으로, 같은 띠 안에서는 각도 순. 그래서
+       가운데에서 바깥으로 한 바퀴씩 자라 보이고, 그 순서가 실제 구축 순서
+       (개체를 세우고 → 근거를 붙이고 → 값을 달고 → 출처를 잇는다)와 같다. */
+    var BAND = { eq: 0, basis: 1, calc: 2, cond: 3,
+                 part: 4, zone: 5, space: 5,
+                 vOK: 6, vNO: 6, vTOL: 6, src: 7 };
+    var bRank = new Array(N.length);
+    (function () {
+      var idx = [];
+      for (var i = 0; i < N.length; i++) idx.push(i);
+      idx.sort(function (a, b) {
+        var ba = BAND[N[a].t], bb = BAND[N[b].t];
+        if (ba === undefined) ba = 9;
+        if (bb === undefined) bb = 9;
+        if (ba !== bb) return ba - bb;
+        return (N[a].a || 0) - (N[b].a || 0);
+      });
+      for (var k = 0; k < idx.length; k++) bRank[idx[k]] = k;
+    }());
+    /* 생성 모드가 아니면 처음부터 전부 보인다 */
+    var building = opts.build === true;
+    var bCut = building ? 0 : N.length;
     /* 눌린 쪽의 바닥값. hover 판독(02)에서는 낮게 두어 이웃이 도드라지게 하고,
        질의응답(03)에서는 높게 두어 배경 그래프가 남아 있게 한다. */
     var DIMF = {
@@ -250,6 +279,8 @@
          탓이고, 지금은 중심이 글과 패널 사이에 들어와 방사선이 한 점으로
          모이는 것이 보인다. */
       for (var e2 = 0; e2 < E.length; e2++) {
+        /* 한쪽 끝이 아직 없으면 선을 그을 데가 없다 */
+        if (bRank[E[e2][0]] >= bCut || bRank[E[e2][1]] >= bCut) continue;
         var a = pt[E[e2][0]], b = pt[E[e2][1]];
         var lit = !isHero && dim && hoverEdges.has(e2);
         /* 눌린 쪽의 바닥값을 .05 → .09 로 올렸다. 질의응답에서 답이 되는
@@ -282,6 +313,7 @@
       /* ── 노드 ── 3D 에서는 먼 것부터 ── */
       for (var oj = 0; oj < order.length; oj++) {
         var j = order[oj];
+        if (bRank[j] >= bCut) continue;          /* 아직 만들어지지 않았다 */
         var n = N[j], ty = TYPES[n.t] || TYPES.src, p = pt[j];
         var rr = (ty.r + Math.min(2.6, Math.sqrt(n.d) * 0.6)) * (isHero ? 0.9 : 1);
         var litN = !isHero && dim && hoverNodes.has(j);
@@ -289,6 +321,12 @@
         if (morph > 0.001) {
           rr *= 1 + morph * (p.k - 1);                       /* 원근 크기 */
           al2 *= 1 - morph * (1 - (0.20 + 0.80 * p.z));      /* 깊이 안개 */
+        }
+        /* 갓 나온 노드는 잠깐 크게 그린다. 이게 없으면 개수만 늘고
+           '하나가 지금 생겼다'가 보이지 않는다. */
+        if (building) {
+          var age = bCut - bRank[j];
+          if (age < 14) rr *= 1 + (1 - age / 14) * 0.9;
         }
 
         ctx.globalAlpha = al2;
@@ -449,6 +487,20 @@
          screenPos(i) 그 노드가 지금 캔버스 안 어디에 찍혀 있는지(CSS px).
                       노드가 <canvas> 안에 있어 CSS 로 움직일 수 없으므로,
                       이 좌표에 DOM 조각을 겹쳐 놓고 그것을 날린다. */
+      /* 진행률 0..1. 생성 모드로 만든 그래프에서만 뜻이 있다. */
+      setBuild: function (p) {
+        if (!building) return;
+        var v = p < 0 ? 0 : p > 1 ? 1 : p;
+        var next = Math.round(v * N.length);
+        if (next === bCut) return;
+        bCut = next;
+        kick();
+      },
+      buildCount: N.length,
+      /* 생성 순서. 화면에 적는 노드·엣지 수를 실제로 그려진 것과 맞추려면
+         바깥에서도 이 순서를 알아야 한다. */
+      buildRank: bRank,
+
       focus: function (list) {
         if (!list || !list.length) {
           focused = false; hoverEdges = hoverNodes = null; kick(); return;
