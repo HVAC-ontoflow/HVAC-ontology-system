@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko" data-lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 모바일 브라우저의 주소창까지 같은 바탕색으로 — 어두운 페이지 위에 흰 띠가 남지 않게 -->
+<meta name="theme-color" content="#070d18">
+<title>ONTOFLOW — HVAC Knowledge System</title>
+<meta name="description" content="설계도면과 계산서로부터 자동 구축한 HVAC 온톨로지를 탐색하고, 설계값의 계산근거를 추적하며, 도면·계산서 사이 정보의 신뢰성을 검토하는 웹 기반 Knowledge Explorer. 트리플 55,791 · 출처 연결 15,983 · 교차검증 948.">
+<meta property="og:title" content="ONTOFLOW — HVAC Knowledge System">
+<meta property="og:description" content="From documents to knowledge · From values to evidence · From search to validation. 55,791 triples built from DWG and PDF design documents.">
+
+<!-- 서체는 이 폴더 안에서만 불러온다 — 외부 요청 0건.
+     한글은 Apple SD Gothic Neo(M 500 · B 700 · EB 800), 라틴·숫자는 IBM Plex Mono.
+     둘을 겹쳐 두는 이유는 서로 빈 글자를 메우기 때문이다 — Apple SD 에는
+     · − • 가 없고 Plex 에는 → ≠ ≈ 가 없다. tools/build_fonts.py 가 fonts/ 를
+     만든다(이 페이지가 쓰는 글자만 남긴 서브셋, 합계 169 KB). -->
+<link rel="stylesheet" href="fonts/fonts.css">
+
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<a class="skip" href="#main"><span class="ko">본문으로 건너뛰기</span><span class="en">Skip to content</span></a>
+
+<!-- ═══ 상단 바 ═══════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-in shell">
+    <a class="brand" href="#top">
+      <span class="brand-mark">ONTOFLOW</span>
+      <span class="brand-sub">HVAC Knowledge System</span>
+    </a>
+
+    <nav class="nav" aria-label="섹션 이동">
+      <a href="#build"><span class="ko">문서 → 온톨로지</span><span class="en">Documents</span></a>
+      <a href="#explore"><span class="ko">온톨로지 탐색</span><span class="en">Explore</span></a>
+      <a href="#qa"><span class="ko">질의응답</span><span class="en">Q&amp;A</span></a>
+    </nav>
+
+    <button class="lang-toggle" id="langToggle" type="button">
+      <span class="ko">EN</span><span class="en">한국어</span>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ═══ 히어로 ═══════════════════════════════════════════════════════
+     이 화면 하나가 포스터에 들어간다. 스크롤 없이 다섯 가지가 보여야 한다.
+     ① 무엇을 만들었는가  ② 지식베이스가 실제로 있는가
+     ③ HVAC 설비 탐색  ④ 근거 추적  ⑤ 정보 검증
+     ══════════════════════════════════════════════════════════════ -->
+<section class="hero shell" id="top">
+
+  <!-- 배경 — ontology.ttl 에서 뽑은 실제 부분 그래프. 장식이지만 지어낸 그림은 아니다.
+       글자 가독성은 CSS 의 .hero-bg::after 스크림이 지킨다. -->
+  <div class="hero-bg" aria-hidden="true"><canvas id="heroGraph"></canvas></div>
+
+  <div class="hero-grid">
+
+    <div>
+      <p class="kicker">
+        <span class="ko">온톨로지 기반 건물 지식 탐색</span>
+        <span class="en">Ontology-based Building Knowledge Explorer</span>
+      </p>
+
+      <h1>
+        <span class="ko">HVAC Knowledge System</span>
+        <span class="en">HVAC Knowledge System</span>
+      </h1>
+
+      <p class="h1-sub">
+        <span class="ko">설계도면 · 계산서 → 온톨로지 → 탐색 · 근거 추적 · 정보 검증</span>
+        <span class="en">Drawings &amp; calculations → ontology → explore · trace · validate</span>
+      </p>
+
+      <p class="lede">
+        <span class="ko">
+          설계도면과 계산서에 흩어져 있던 HVAC 설계정보를 <strong>출처와 계산근거를 유지한 채</strong> 온톨로지로 구조화했습니다.<br>
+          이 페이지에서 HVAC 설비를 탐색하고, 설계값이 왜 그 값인지 거슬러 올라가고, 도면과 계산서가 어디까지 일치하는지 확인할 수 있습니다.
+        </span>
+        <span class="en">HVAC design information scattered across drawings and calculation sheets has been
+          restructured into an ontology <strong>with its provenance and calculation basis intact</strong>.
+          This page lets you explore the equipment, walk back up the evidence behind a design value, and see
+          how far the drawings and the calculations agree.</span>
+      </p>
+
+      <!-- 연구가 무엇을 바꿨는지 세 줄 -->
+      <ol class="msgs">
+        <li>
+          <span class="msg-n">01</span>
+          <span class="msg-t">From documents to knowledge</span>
+          <span class="msg-d">
+            <span class="ko">DWG · PDF 설계문서를 개체 · 값 · 관계 · 출처가 연결된 지식베이스로 변환</span>
+            <span class="en">DWG and PDF design documents become a knowledge base of linked individuals, values, relations and sources</span>
+          </span>
+        </li>
+        <li>
+          <span class="msg-n">02</span>
+          <span class="msg-t">From values to evidence</span>
+          <span class="msg-d">
+            <span class="ko">값을 찾는 데서 멈추지 않고 계산식 · 설계조건 · 원문 쪽수까지 추적</span>
+            <span class="en">not just the value, but the formula, the design conditions and the page it came from</span>
+          </span>
+        </li>
+        <li>
+          <span class="msg-n">03</span>
+          <span class="msg-t">From search to validation</span>
+          <span class="msg-d">
+            <span class="ko">문서 간 일치 · 차이 · 허용오차를 구분하고, 다른 값을 임의로 지우지 않음</span>
+            <span class="en">agreement, disagreement and tolerance are told apart — and contradictions are never quietly removed</span>
+          </span>
+        </li>
+      </ol>
+    </div>
+
+    <!-- 실제 ZHUA01 데이터로 만든 미리보기. app.js 가 KB.evidence 로 채운다. -->
+    <div class="preview" id="heroPreview" aria-label="근거 사슬 미리보기"></div>
+
+  </div>
+
+  <!-- 규모 지표 -->
+  <div class="kpi" id="kpiStrip" aria-label="지식베이스 구축 규모"></div>
+
+  <!-- 기능 세 장 — 중요도 순서대로 근거추적 · 정보검증 · 장비탐색 -->
+  <div class="caps">
+    <a class="cap" href="#evidence">
+      <span class="cap-n">01</span>
+      <span class="cap-q"><span class="ko">왜 이 값인가?</span><span class="en">Why this value?</span></span>
+      <p class="cap-t"><span class="ko">설계근거 추적</span><span class="en">Trace Design Evidence</span></p>
+      <p class="cap-d">
+        <span class="ko">설계값 → 선정근거 → 계산식 → 설계조건 → 원문 쪽수까지 이어지는 근거 사슬</span>
+        <span class="en">the chain from a design value back through its basis, formula, conditions and source page</span>
+      </p>
+      <span class="cap-go">
+        <span class="ko">7,300 CMH의 근거 보기</span><span class="en">See what stands behind 7,300 CMH</span>
+      </span>
+    </a>
+
+    <a class="cap" href="#validation">
+      <span class="cap-n">02</span>
+      <span class="cap-q"><span class="ko">믿을 수 있나?</span><span class="en">Can it be trusted?</span></span>
+      <p class="cap-t"><span class="ko">정보 신뢰성 검토</span><span class="en">Validate Information</span></p>
+      <p class="cap-d">
+        <span class="ko">도면과 계산서를 대조해 교차검증 · 값 차이 · 허용오차를 구분</span>
+        <span class="en">drawings against calculations — cross-validated, divergent, or within tolerance</span>
+      </p>
+      <span class="cap-go">
+        <span class="ko">2.2 kW와 3.0 kW 사례 보기</span><span class="en">See the 2.2 kW vs 3.0 kW case</span>
+      </span>
+    </a>
+
+    <a class="cap" href="#explorer">
+      <span class="cap-n">03</span>
+      <span class="cap-q"><span class="ko">무엇인가?</span><span class="en">What is it?</span></span>
+      <p class="cap-t"><span class="ko">HVAC 설비 · 공간 탐색</span><span class="en">Explore HVAC</span></p>
+      <p class="cap-d">
+        <span class="ko">HVAC 설비 한 대의 사양 · 설치위치 · 담당 Zone · 부품 · 출처를 한 화면에</span>
+        <span class="en">one unit’s specifications, location, zone, parts and sources on a single screen</span>
+      </p>
+      <span class="cap-go">
+        <span class="ko">ZHUA01 프로필 보기</span><span class="en">Open the ZHUA01 profile</span>
+      </span>
+    </a>
+  </div>
+</section>
+
+
+<!-- ═══ 01 문서 → 온톨로지 ═════════════════════════════════════════════
+     설계문서가 들어가서 무엇이 되어 나오는지. 왼쪽에 입력, 가운데에 변환,
+     오른쪽에 결과를 두고, 마지막 줄이 아래 탐색 파트로 넘긴다.
+     숫자는 모두 js/data.js — ontology.ttl 실측값이다.
+     ══════════════════════════════════════════════════════════════ -->
+<section class="sec" id="build">
+  <div class="sec-in shell">
+    <div class="sec-label">
+      <span class="sec-no">01</span>
+      <h2><span class="ko">문서에서 온톨로지로</span><span class="en">Documents to Ontology</span></h2>
+      <span class="sec-q">
+        <span class="ko">무엇을 넣어 무엇이 나왔나</span>
+        <span class="en">What went in, what came out</span>
+      </span>
+    </div>
+
+    <div>
+      <p class="sec-lede">
+        <span class="ko">설계도면(DWG)과 설비계산서(PDF)를 그대로 입력했습니다.<br>
+          사람이 표를 옮겨 적은 것이 아니라, <strong>문서에서 개체 · 값 · 관계 · 출처를 뽑아
+          자동으로 온톨로지를 만들었습니다.</strong></span>
+        <span class="en">Design drawings (DWG) and equipment calculation sheets (PDF) went in as they are.
+          Nobody re-typed the tables: individuals, values, relations and their sources were
+          extracted from the documents and assembled into the ontology automatically.</span>
+      </p>
+
+      <div class="flow3">
+        <div class="f3-col">
+          <span class="f3-cap"><span class="ko">입력 · 설계문서</span><span class="en">Input · design documents</span></span>
+          <ul class="f3-docs" id="f3Docs"></ul>
+          <p class="f3-note">
+            <span class="ko">출처 참조 921개가 이 문서들을 가리킵니다.</span>
+            <span class="en">921 source references point back into these documents.</span>
+          </p>
+        </div>
+
+        <div class="f3-col f3-col--mid">
+          <span class="f3-cap"><span class="ko">변환</span><span class="en">Transform</span></span>
+          <ol class="f3-steps" id="f3Steps"></ol>
+        </div>
+
+        <div class="f3-col">
+          <span class="f3-cap"><span class="ko">결과 · 온톨로지</span><span class="en">Output · ontology</span></span>
+          <ul class="f3-out" id="f3Out"></ul>
+          <p class="f3-note">
+            <span class="ko">TBox는 Brick 1.4.1을 어휘로 재사용하고, 근거 · 출처 · 값의 층위에
+              관한 문법은 자체 정의했습니다.</span>
+            <span class="en">The TBox reuses Brick 1.4.1 as its vocabulary; the grammar for evidence,
+              provenance and value layering is defined here.</span>
+          </p>
+        </div>
+      </div>
+
+      <p class="f3-hand">
+        <span class="ko">아래가 그 결과입니다 — 노드에 커서를 올리면 그 개체가 무엇이고
+          어떤 관계로 무엇에 매달려 있는지 그대로 나옵니다.</span>
+        <span class="en">What follows is that result. Hover a node to see what the individual is
+          and exactly what it hangs off.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ 02 온톨로지 탐색 ═══════════════════════════════════════════════
+     오른쪽에 그래프, 왼쪽에 판독. 커서를 올린 노드의 클래스와 관계 전부를
+     왼쪽에 쓴다. 그래프는 2D/3D 둘 다 그대로 쓴다.
+     ══════════════════════════════════════════════════════════════ -->
+<section class="sec" id="explore">
+  <div class="sec-in shell">
+    <div class="sec-label">
+      <span class="sec-no">02</span>
+      <h2><span class="ko">온톨로지 탐색</span><span class="en">Explore the Ontology</span></h2>
+      <span class="sec-q">
+        <span class="ko">무엇이 무엇에 매달려 있나</span>
+        <span class="en">What hangs off what</span>
+      </span>
+    </div>
+
+    <div>
+      <div class="ex-grid">
+        <!-- 왼쪽 — 판독 -->
+        <div class="ex-side">
+          <div class="ex-read" id="exRead"></div>
+          <ul class="ex-legend" id="exLegend"></ul>
+        </div>
+
+        <!-- 오른쪽 — 그래프 -->
+        <div class="ex-graph">
+          <div class="map-dim" id="mapDim" role="group" aria-label="2D / 3D 전환"></div>
+          <div class="ex-stage">
+            <canvas class="map-canvas" id="mapGraph"
+                    aria-label="온톨로지 부분 그래프"></canvas>
+            <p class="ex-count" id="exCount"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ 03 질의응답 ═══════════════════════════════════════════════════
+     세 문항이 무한히 반복된다. 질문이 타이핑되고, 그래프가 눌리고, 답이 되는
+     노드가 밝아진 뒤 왼쪽 답변판으로 내려앉는다. 그 다음 근거 · 출처 · 조건이
+     채워진다. t-ranno 레퍼런스의 진행 방식(타이핑 → 매칭 → 비행 → 조립)을
+     그대로 따랐다.
+
+     답은 지어내지 않는다. 세 문항 모두 답이 되는 노드를 GRAPH 에서 실제로
+     찾아서 쓴다 — js/app.js 의 qaResolve() 가 그 일을 한다.
+     ══════════════════════════════════════════════════════════════ -->
+<section class="sec" id="qa">
+  <div class="sec-in shell">
+    <div class="sec-label">
+      <span class="sec-no">03</span>
+      <h2><span class="ko">질의응답</span><span class="en">Question &amp; Answer</span></h2>
+      <span class="sec-q">
+        <span class="ko">물어보면 어디서 답이 오나</span>
+        <span class="en">Where the answer comes from</span>
+      </span>
+    </div>
+
+    <div>
+      <p class="sec-lede">
+        <span class="ko">세 문항이 차례로 반복됩니다.<br>
+          답이 되는 개체가 그래프에서 밝아진 뒤 왼쪽으로 내려앉고, 그 값의
+          <strong>근거 · 출처 · 설계조건</strong>이 함께 붙습니다.</span>
+        <span class="en">Three questions cycle in turn. The individuals that answer each one light
+          up in the graph, settle into the panel on the left, and arrive with their
+          evidence, source and design conditions attached.</span>
+      </p>
+
+      <div class="qa2">
+        <!-- 왼쪽 — 질문과 답변 -->
+        <div class="qa2-side">
+          <div class="qa2-ask">
+            <div class="qa2-who">
+              <span class="qa2-who-t"><span class="ko">질문</span><span class="en">Question</span></span>
+              <span class="qa2-who-s"><span class="ko">사람이 입력한 문장</span><span class="en">typed by a person</span></span>
+            </div>
+            <p class="qa2-q" id="qaQ"></p>
+          </div>
+
+          <div class="qa2-ans" id="qaAns">
+            <div class="qa2-who">
+              <span class="qa2-who-t"><span class="ko">온톨로지 기반 답변</span><span class="en">Answer from the ontology</span></span>
+              <span class="qa2-state" id="qaState"></span>
+            </div>
+            <ol class="qa2-slots" id="qaSlots"></ol>
+            <dl class="qa2-meta" id="qaMeta"></dl>
+          </div>
+        </div>
+
+        <!-- 오른쪽 — 그래프 + 날아가는 조각이 담기는 층 -->
+        <div class="qa2-graph">
+          <canvas class="qa2-canvas" id="qaGraph" aria-hidden="true"></canvas>
+          <div class="qa2-fly" id="qaFly" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <p class="qa2-foot">
+        <span class="ko">답은 지어낸 문장이 아닙니다. 위 그래프에서 실제로 찾아낸 개체이고,
+          출처는 그 개체에 매달린 SourceReference 그대로입니다.</span>
+        <span class="en">These answers are not generated sentences. They are individuals actually
+          found in the graph above, with the SourceReference attached to each one.</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot shell">
+  <div>
+    <p class="made">
+      <span class="ko"><strong>성균관대학교 건설환경공학부</strong> · 2026년 제14회 HVAC 경진대회 ·
+        지도교수 윤성민 · 참여학생 김건우 · 류채원 · 이유진 · 장병준 · 최윤서</span>
+      <span class="en"><strong>School of Civil, Architectural Engineering and Landscape Architecture,
+        Sungkyunkwan University</strong> · 14th HVAC Competition 2026 · Advisor Sungmin Yoon ·
+        Geonwoo Kim · Chaewon Ryu · Yujin Lee · Byeongjun Jang · Yunseo Choi</span>
+    </p>
+    <p class="note">
+      <span class="ko">건물 운영 단계에서의 활용을 위한 설계 및 현장 정보의 지식 자산화 ·
+        대상 건물: 수도권 · 위치 비공개 업무시설</span>
+      <span class="en">Turning design and field information into a knowledge asset for the building
+        operation stage · Case building: an office facility in the Seoul metropolitan area</span>
+    </p>
+  </div>
+  <a class="foot-back" href="#top">
+    <span class="ko">↑ 처음으로</span><span class="en">↑ Back to top</span>
+  </a>
+</footer>
+
+<script src="js/data.js"></script>
+<script src="js/graph-data.js"></script>
+<script src="js/graph.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

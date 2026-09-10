@@ -1,0 +1,1177 @@
+/* ═══════════════════════════════════════════════════════════════════
+   SKKUVAC — HVAC Knowledge System
+   Ontology-based Building Knowledge Explorer
+
+   디자인 언어는 레퍼런스 세 페이지(IEI 데이터센터 · Mangru · 도시공원)에서
+   가져왔다. 색도 저쪽을 따른다 — IEI 가 #07070d 에 미색 글자를 얹는 방식 그대로,
+   이 페이지는 짙은 네이비(#070d18)에 밝은 청백색 글자를 얹는다.
+   (처음에는 포스터가 흰 바탕이라 흰 배경으로 갔는데, 화면에서 너무 허옇다.)
+
+   레퍼런스에서 그대로 가져온 것
+     · 영역은 테두리가 아니라 헤어라인 한 줄과 여백으로 나눈다
+     · 섹션 제목은 11~12px 대문자 + 넓은 자간. 위계는 크기가 아니라 명도와 여백
+     · 숫자와 라틴 라벨은 모노, 한글은 같은 가족의 산세리프 (font-family 분리)
+     · gap:1px + 배경색으로 만드는 헤어라인 패널 격자
+     · --label 거터 그리드(섹션 제목 왼쪽 고정폭 + 본문)
+     · 두 언어가 모두 마크업에 있고 CSS 가 한쪽을 감춘다
+     · 모서리 반경은 2~3px. 그림자는 팝오버에만
+
+   버린 것
+     · 세리프 표제 · IFC 3D 뷰어 iframe · 지도 · 챗봇 형태의 대화 UI
+   (스크롤 구동 장면 전환은 도시공원에서 가져와 §05 질의응답에 썼다.)
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── 바탕과 면 ──
+     흰 바탕에서 면을 구분하는 것은 채도가 아주 낮은 청회색 세 단계다.
+     --surface 는 카드·패널 안쪽. 지금은 --bg 와 같은 흰색이지만, 필드에
+     색을 넣고 싶을 때 이 토큰만 갈면 된다. */
+  --bg:        #070d18;
+  --surface:   #0b1424;
+  --panel:     #101c30;
+  --panel-2:   #14233a;
+  --panel-3:   #1a2c47;
+
+  /* 스크림과 반투명 바탕이 쓰는 바탕색의 원료. 그라디언트 안에서 알파만
+     바꿔 써야 하므로 색상값이 아니라 세 숫자로 둔다. */
+  --scrim-rgb: 7, 13, 24;
+
+  /* 포인트 색 위에 얹는 글자. 밝은 파랑 위에서는 흰색이 아니라 바탕색이다. */
+  --on-accent: #061020;
+
+  /* 헤어라인. 이 페이지에서 영역을 나누는 거의 유일한 선. */
+  /* 헤어라인도 한 단계 올렸다(.12/.24 → .20/.34). 짙은 바탕에서 .12 는
+     화면 밝기를 조금만 낮춰도 사라져 영역이 안 보였다. */
+  --line:      rgba(150, 200, 255, .20);
+  --line-2:    rgba(150, 200, 255, .34);
+
+  /* ── 글자 ── 네 단계. 아래로 갈수록 조용해진다. */
+  /* 글자 — 네 단계. 앞서 --body 를 .80 알파로, --dim/--dimmer 를 낮은 채도
+     회청색으로 두었더니 본문과 라벨이 거의 읽히지 않았다. 알파를 걷어내고
+     실제 색으로 올리고, 아래 두 단계의 명도를 크게 높였다.
+       body   rgba(.80) → #cfe0f5   (불투명)
+       dim    #93accb  → #a8c4e6
+       dimmer #62809f  → #8aa6c8   (라벨이 이 색이라 특히 중요했다) */
+  --text:      #f2f7ff;
+  --body:      #cfe0f5;
+  --dim:       #a8c4e6;
+  --dimmer:    #8aa6c8;
+
+  /* ── 포인트 색 ──
+     포스터가 white + blue 이므로 UI 포인트는 그 파랑 하나로 통일한다. */
+  /* 포인트 — 채도를 올렸다. 짙은 네이비 바탕에서는 파랑이 바탕에 묻히므로
+     한 단계 밝고 선명한 쪽으로 간다. */
+  --accent:      #6ab4ff;
+  /* 어두운 바탕에서 "더 진한 것"은 더 밝은 것이다 — 강조는 위로 간다. */
+  --accent-deep: #a6d4ff;
+  --accent-soft: rgba(106, 180, 255, .18);
+  --accent-line: rgba(106, 180, 255, .45);
+
+  /* ── 검증 상태 색 ──
+     색은 장식이 아니라 값이다. 세 상태에만 색을 쓰고 나머지는 무채색으로 둔다.
+     색만으로 구분되지 않도록 상태마다 기호(= ≠ ≈)를 함께 붙인다. */
+  --ok:        #4dEFA6;   /* VERIFIED     — 두 자료가 같다        = */
+  --ok-soft:   rgba(77, 239, 166, .18);
+  /* DIVERGENT — 두 자료가 다르다  ≠
+     주황(#fb923c)으로 두었더니 '틀렸다 · 오류'로 읽혔다. 이 상태는 오류가
+     아니다 — 두 문서에 다르게 적혀 있다는 사실이고, 어느 쪽도 틀린 값이
+     아니다. 그래서 경고색을 빼고 차분한 금색으로 내렸다. 초록·청록과는
+     여전히 확실히 갈린다. (토큰 이름은 --warn 그대로 두었다. 세 상태가
+     ok/warn/tol 한 벌로 묶여 있어서, 이름만 바꾸면 오히려 읽기 어려워진다.) */
+  --warn:      #f0be74;
+  --warn-soft: rgba(240, 190, 116, .18);
+  --tol:       #4fcfff;   /* TOLERANCE_OK — 다르지만 허용오차 내  ≈ */
+  --tol-soft:  rgba(79, 207, 255, .18);
+  --none:      #96abc4;   /* SINGLE_SOURCE / UNRESOLVED           · */
+  --none-soft: rgba(123, 142, 168, .10);
+
+  /* ── 서체 ──
+     IBM Plex Mono 와 IBM Plex Sans KR 은 같은 가족이라 한 스택에 섞어도
+     리듬이 어긋나지 않는다(레퍼런스 도시공원과 같은 선택). */
+  /* IBM Plex Mono 에는 한글이 없다. 이 스택에 한글 서체를 뒤에 달아 두지 않으면
+     모노로 조판한 자리(관계 그래프 라벨 · 출처 칩 · 값 노드 이름 …)의 한글이
+     시스템 기본 서체로 떨어져 라틴과 리듬이 싸운다 — 레퍼런스 세 페이지가
+     모두 경고해 둔 함정이고, 실제로 §03 그래프의 "해당층" 이 그렇게 찍혔다.
+     서체 대체는 글자 단위이므로, 라틴·숫자는 그대로 Plex Mono 에서 오고
+     한글만 Pretendard 에서 온다. */
+  --mono: 'IBM Plex Mono', 'Apple SD Gothic Neo',
+          ui-monospace, SFMono-Regular, Consolas, Menlo, monospace;
+  /* 한글은 Apple SD Gothic Neo. fonts/ 에서 직접 불러오므로 네트워크와
+     무관하다(M 500 · B 700 · EB 800 세 벌).
+
+     뒤에 IBM Plex Mono 를 둔 것은 오타가 아니다. Apple SD 에는 · − • 가 없고
+     Plex 에는 → ≠ ≈ 가 없다. 서체 대체는 글자 단위로 일어나므로 두 벌을
+     겹쳐 두면 서로 빈 자리를 메운다. 이 페이지에서 · 는 구분자로 아주 많이
+     쓰이는데, 이 순서가 아니면 그 점만 시스템 서체로 떨어진다. */
+  --kr:   'Apple SD Gothic Neo', 'IBM Plex Mono',
+          'Malgun Gothic', system-ui, sans-serif;
+
+  /* ── 폭 ──
+     첫 화면이 1920 스크린샷으로 쓰이므로 셸을 레퍼런스(82rem)보다 넓게 잡되,
+     글줄은 --measure 로 따로 묶어 읽기 길이를 지킨다. */
+  --shell:   1500px;
+  /* ch 는 '0' 글자의 폭이다. 한글은 한 글자가 거의 1em 이므로 ch 로 재면
+     실제 글자 수의 절반쯤밖에 안 담긴다. 한글 본문이 편한 40~45자에 맞춘다.
+     글자를 키웠으므로 폭도 같이 넓힌다. */
+  --measure: 46em;
+  --label:   150px;   /* 섹션 제목이 서는 왼쪽 거터 */
+  --pad:     clamp(20px, 3.4vw, 56px);
+
+  /* 섹션 사이의 간격 — 여백이 구획이다 */
+  --gap-sec: clamp(60px, 6.5vw, 124px);
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--body);
+  font-family: var(--kr);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.72;
+  letter-spacing: -.003em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── 언어 ───────────────────────────────────────────────────────────
+   두 언어가 모두 마크업에 있고 CSS 가 한쪽을 감춘다. 스크립트가 돌기 전에도
+   페이지는 이미 올바른 언어이며, 스크립트가 실패해도 읽힌다. */
+[data-lang="ko"] .en,
+[data-lang="en"] .ko { display: none; }
+
+[data-lang="en"] body { font-family: var(--mono); font-weight: 300; line-height: 1.75; }
+[data-lang="en"] :is(h1, h2, h3) { letter-spacing: -.005em; }
+
+/* 한글은 기본적으로 음절 단위로 잘려 낱말이 반토막 난다. */
+[data-lang="ko"] :is(p, li, dd, .lede, .verdict, .step-text) { word-break: keep-all; }
+
+/* Pretendard 는 같은 굵기 값에서 Plex 보다 조금 가볍게 앉고 자간이 넉넉하다.
+   한글일 때만 본문 자간을 0 으로 되돌리고 큰 제목을 한 단계 조여 준다. */
+[data-lang="ko"] body { letter-spacing: 0; }
+[data-lang="ko"] h1 { letter-spacing: -.035em; font-weight: 700; }
+[data-lang="ko"] :is(.cap-t, .flow-n, .tq-text, .q-text, .vc-q) { letter-spacing: -.015em; }
+
+/* 지원하는 브라우저에서만 적용되고 나머지는 조용히 무시된다. */
+h1, h2, h3, .q-text, .tile-label { text-wrap: balance; }
+p, .lede, .verdict, .step-text, .a-text { text-wrap: pretty; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-deep); }
+strong, b { color: var(--text); font-weight: 600; }
+/* 본문 안의 파일명·URI. 기본 monospace 는 페이지의 모노와 크기가 어긋난다. */
+code {
+  font-family: var(--mono); font-size: .93em; letter-spacing: -.01em;
+  color: var(--accent-deep); background: var(--accent-soft);
+  border-radius: 2px; padding: 1px 4px;
+}
+[data-lang="en"] strong { font-weight: 500; }
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus {
+  left: 12px; top: 12px; z-index: 99;
+  background: var(--accent); color: var(--on-accent); padding: 10px 18px; border-radius: 2px;
+}
+
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ── 폭 유틸 ── 좌우 여백이 늘 같도록 min() 한 줄로 처리한다 ───────── */
+.shell { width: min(100% - 2 * var(--pad), var(--shell)); margin-inline: auto; }
+
+/* 모노 숫자. 자리수가 바뀌어도 열이 흔들리지 않아야 한다. */
+.num {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+
+
+/* ═══ 상단 바 ══════════════════════════════════════════════════════
+   워드마크 · 섹션 이동 · 언어 전환. 그 셋뿐이다.
+   페이지가 길으므로 붙여 두되, 반투명 대신 불투명으로 둔다 —
+   숫자가 가득한 페이지에서 흐릿한 배경 위의 글자는 읽기 어렵다. */
+.topbar {
+  position: sticky; top: 0; z-index: 30;
+  background: rgba(var(--scrim-rgb), .93);
+  backdrop-filter: saturate(180%) blur(6px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-in {
+  display: flex; align-items: center; gap: clamp(14px, 2vw, 32px);
+  height: 56px;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; color: inherit; }
+.brand:hover { color: inherit; }
+.brand-mark {
+  font-family: var(--mono); font-weight: 600; font-size: 17px;
+  letter-spacing: .10em; color: var(--accent-deep);
+}
+.brand-sub {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--dimmer);
+}
+@media (max-width: 900px) { .brand-sub { display: none; } }
+
+/* min-width:0 이 없으면 flex 항목이 내용 폭 아래로 줄지 않아 상단 바 밖으로 넘친다
+   (390px 화면에서 마지막 링크가 실제로 잘려 나갔다). */
+.nav {
+  display: flex; gap: 2px; margin-left: auto; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+.nav a {
+  flex: 0 0 auto;
+  padding: 7px 11px; border-radius: 2px;
+  font-family: var(--mono); font-size: 13.5px; letter-spacing: .07em;
+  color: var(--dim); white-space: nowrap;
+}
+.nav a:hover { color: var(--accent-deep); background: var(--panel-2); }
+.nav a.on { color: var(--accent-deep); background: var(--accent-soft); }
+@media (prefers-reduced-motion: no-preference) {
+  .nav a { transition: color .15s ease, background .15s ease; }
+}
+
+.lang-toggle {
+  flex: 0 0 auto; margin-left: 4px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .12em;
+  background: none; color: var(--dim);
+  border: 1px solid var(--line-2); border-radius: 2px;
+  padding: 6px 12px; cursor: pointer;
+}
+.lang-toggle:hover { color: var(--accent-deep); border-color: var(--accent-line); }
+
+/* 좁은 화면에서는 상단 바가 두 줄이 된다 — 워드마크와 언어 전환이 첫 줄,
+   섹션 이동이 그 아래 한 줄. 한 줄에 밀어 넣고 옆으로 스크롤시키면
+   뒤쪽 링크가 있는 줄도 모른다. */
+@media (max-width: 780px) {
+  html { scroll-padding-top: 96px; }
+  .topbar-in { height: auto; flex-wrap: wrap; row-gap: 4px; padding-block: 9px; }
+  .brand { flex: 0 1 auto; min-width: 0; }
+  .lang-toggle { margin-left: auto; }
+  .nav {
+    order: 3; flex: 1 0 100%; margin-left: 0;
+    padding-bottom: 2px;
+    /* 옆으로 스크롤될 때 끝이 잘린 것을 알 수 있도록 오른쪽을 흐린다 */
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+  }
+  .nav a { padding: 6px 9px; }
+}
+
+
+/* ═══ 히어로 ═══════════════════════════════════════════════════════
+   이 화면 하나가 포스터에 들어가는 스크린샷이다. 그래서 스크롤 없이
+   ① 무엇을 만든 것인가 ② 실제로 지식베이스가 있는가
+   ③ 탐색 ④ 근거 추적 ⑤ 정보 검증 이 다섯이 함께 보여야 한다.
+
+   왼쪽에 제목과 세 메시지, 오른쪽에 실제 데이터로 된 미리보기 패널,
+   그 아래 전체폭으로 규모 지표와 기능 세 장. */
+.hero {
+  padding-top: clamp(28px, 3.4vw, 48px);
+  /* 1920×1080 스크린샷에서 접힘선이 다음 섹션 글자를 반쯤 자르지 않도록,
+     기능 카드 아래에 한 뼈만큼 더 둔다. */
+  padding-bottom: clamp(10px, 1.4vw, 26px);
+}
+.hero-grid {
+  display: grid; gap: clamp(28px, 3.2vw, 52px);
+  align-items: start;
+}
+@media (min-width: 1080px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(430px, 560px); }
+}
+
+.kicker {
+  margin: 0 0 14px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .20em;
+  text-transform: uppercase; color: var(--accent);
+}
+.kicker::before {
+  content: ""; display: inline-block;
+  width: 20px; height: 1px; margin-right: 12px; vertical-align: middle;
+  background: var(--accent-line);
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: clamp(32.4px, 3.5vw, 47.8px); line-height: 1.14;
+  font-weight: 600; letter-spacing: -.025em; color: var(--text);
+}
+[data-lang="en"] h1 { font-weight: 500; letter-spacing: -.03em; }
+.h1-sub {
+  margin: 0 0 18px;
+  font-family: var(--mono); font-size: clamp(14.5px, 1.05vw, 16.5px);
+  letter-spacing: .05em; color: var(--accent-deep);
+}
+.hero .lede {
+  margin: 0; max-width: var(--measure);
+  font-size: clamp(16.5px, 1.1vw, 18px); line-height: 1.78; color: var(--dim);
+}
+
+/* ── 세 메시지 ──
+   연구가 무엇을 뒤집었는지 한 줄씩. 카드가 아니라 번호 · 제목 · 한 줄의 글이고,
+   구분은 위쪽 헤어라인 하나가 진다. */
+.msgs { list-style: none; margin: clamp(22px, 2.4vw, 34px) 0 0; padding: 0; }
+.msgs li {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr);
+  gap: 2px 14px; align-items: baseline;
+  padding: 13px 0; border-top: 1px solid var(--line);
+}
+.msgs li:last-child { border-bottom: 1px solid var(--line); }
+.msg-n {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .08em;
+  color: var(--dimmer); font-variant-numeric: tabular-nums;
+}
+.msg-t {
+  font-family: var(--mono); font-size: 14.5px; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--text); font-weight: 500;
+}
+.msg-d { grid-column: 2; font-size: 15.5px; line-height: 1.66; color: var(--dim); }
+
+/* ── 미리보기 패널 ──
+   히어로에서 유일한 상자. 실제 ZHUA01 데이터로 세 기능을 한 장에 담는다. */
+.preview {
+  border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--surface); overflow: hidden;
+}
+.preview-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 16px; background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+.preview-head .pv-title {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .17em;
+  text-transform: uppercase; color: var(--dim);
+}
+.preview-head .pv-id {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .06em; color: var(--accent-deep);
+}
+.preview-head .pv-cls {
+  font-family: var(--mono); font-size: 13px; color: var(--dimmer);
+}
+
+.pv-body { padding: 16px 16px 4px; }
+
+/* 값 한 줄 — 값이 크고, 상태가 그 옆에 붙는다 */
+.pv-value {
+  display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--line);
+}
+.pv-value .pvv-num {
+  font-family: var(--mono); font-size: clamp(32.4px, 2.6vw, 41px); line-height: 1;
+  font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+.pv-value .pvv-unit {
+  font-family: var(--mono); font-size: 15.5px; color: var(--dim); padding-bottom: 3px;
+}
+.pv-value .pvv-prop {
+  flex: 1 0 100%;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .05em;
+  color: var(--dimmer); margin-bottom: 5px;
+}
+.pv-value .badge { margin-bottom: 2px; }
+
+/* 근거 사슬 압축판 — 관계 이름을 연결선 위에 얹는다 */
+.pv-chain { list-style: none; margin: 0; padding: 0; }
+.pv-chain li {
+  position: relative; padding: 9px 0 9px 0;
+}
+.pv-chain li + li { border-top: 1px dashed var(--line); }
+.pv-chain .pc-rel {
+  display: block;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+  color: var(--accent); margin-bottom: 3px;
+}
+.pv-chain .pc-rel::before { content: "↑ "; color: var(--accent-line); }
+.pv-chain .pc-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pv-chain .pc-node {
+  font-family: var(--mono); font-size: 13px; color: var(--dimmer);
+  flex: 0 0 auto;
+}
+.pv-chain .pc-val {
+  font-family: var(--mono); font-size: 14.5px; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.pv-chain .pc-val em { font-style: normal; color: var(--dim); font-size: 13.5px; }
+
+.pv-foot {
+  display: flex; gap: 1px; margin-top: 14px;
+  background: var(--line); border-top: 1px solid var(--line);
+}
+.pv-foot > div {
+  flex: 1 1 0; min-width: 0; background: var(--surface);
+  padding: 11px 12px 12px; text-align: left;
+}
+.pv-foot .pf-n {
+  font-family: var(--mono); font-size: 19.5px; font-weight: 500;
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.pv-foot .pf-l {
+  display: block; margin-top: 3px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .10em;
+  text-transform: uppercase; line-height: 1.4;
+}
+.pv-foot .is-ok   .pf-n { color: var(--ok); }   .pv-foot .is-ok   .pf-l { color: var(--ok); }
+.pv-foot .is-warn .pf-n { color: var(--warn); } .pv-foot .is-warn .pf-l { color: var(--warn); }
+.pv-foot .is-tol  .pf-n { color: var(--tol); }  .pv-foot .is-tol  .pf-l { color: var(--tol); }
+
+
+/* ── 규모 지표 ──
+   숫자 카드를 늘어놓는 대신 헤어라인 격자 한 판으로 묶는다. 여섯 칸이
+   한 덩어리로 읽혀야 "이만한 지식베이스가 있다"가 한눈에 온다. */
+.kpi {
+  display: grid; gap: 1px; margin-top: clamp(26px, 3vw, 44px);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  background: var(--line);
+  border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+}
+.kpi > div { background: var(--surface); padding: clamp(14px, 1.5vw, 20px) clamp(12px, 1.3vw, 18px); }
+.kpi .tile-n {
+  display: block;
+  font-family: var(--mono); font-size: clamp(23.5px, 2.1vw, 32.4px); line-height: 1.05;
+  font-weight: 500; color: var(--accent-deep);
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+}
+.kpi .tile-label {
+  display: block; margin-top: 7px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .11em;
+  text-transform: uppercase; line-height: 1.45; color: var(--text);
+}
+.kpi .tile-note {
+  display: block; margin-top: 3px;
+  font-size: 13px; line-height: 1.45; color: var(--dimmer);
+}
+/* ontology.ttl 을 직접 세어 교차확인한 지표에만 붙는 표시 */
+.kpi .tile-ck {
+  display: inline-block; margin-left: 5px; vertical-align: 2px;
+  font-family: var(--mono); font-size: 12px; color: var(--ok);
+}
+@media (max-width: 1180px) { .kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px)  { .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ── 기능 세 장 ── 첫 화면에서 이 시스템이 무엇을 하는지 알려 주는 자리 ── */
+.caps {
+  display: grid; gap: clamp(14px, 1.6vw, 22px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: clamp(16px, 1.8vw, 24px);
+}
+@media (max-width: 860px) { .caps { grid-template-columns: minmax(0, 1fr); } }
+.cap {
+  display: block; padding: 18px 20px 20px;
+  border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--surface); color: inherit;
+}
+.cap:hover { border-color: var(--accent-line); background: var(--accent-soft); color: inherit; }
+@media (prefers-reduced-motion: no-preference) {
+  .cap { transition: border-color .16s ease, background .16s ease; }
+}
+.cap-n {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .14em;
+  color: var(--dimmer);
+}
+.cap-q {
+  margin: 8px 0 0;
+  font-family: var(--mono); font-size: 14.5px; letter-spacing: .02em; color: var(--accent);
+}
+.cap-t {
+  margin: 5px 0 0; font-size: 19.5px; font-weight: 600; line-height: 1.35; color: var(--text);
+}
+[data-lang="en"] .cap-t { font-weight: 500; }
+.cap-d { margin: 7px 0 0; font-size: 14.5px; line-height: 1.62; color: var(--dim); }
+/* 링크 문구지 코드 라벨이 아니다. 대문자로 바꾸면 단위 kW 가 KW 로 망가진다. */
+.cap-go {
+  display: block; margin-top: 12px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .04em;
+  color: var(--accent);
+}
+
+
+/* ═══ 섹션 ═════════════════════════════════════════════════════════
+   레퍼런스의 --label 거터 구조. 제목이 왼쪽 고정폭 칸에 서고 본문이 그 옆을
+   쓰므로, 페이지를 훑을 때 제목만 세로로 이어 읽힌다. */
+.sec { padding-top: var(--gap-sec); }
+.sec-in { display: grid; gap: 0 44px; }
+@media (min-width: 1000px) {
+  .sec-in { grid-template-columns: var(--label) minmax(0, 1fr); }
+}
+
+.sec-label { position: sticky; top: 76px; align-self: start; }
+@media (max-width: 999px) { .sec-label { position: static; margin-bottom: 18px; } }
+h2 {
+  margin: 0;
+  font-family: var(--mono); font-weight: 500;
+  font-size: 13.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--text); line-height: 1.6;
+}
+.sec-no {
+  display: block; margin-bottom: 6px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .16em; color: var(--accent);
+}
+.sec-q {
+  display: block; margin-top: 8px;
+  font-size: 14.5px; line-height: 1.6; color: var(--dimmer);
+}
+@media (max-width: 999px) {
+  h2::before {
+    content: ""; display: inline-block;
+    width: 18px; height: 1px; margin-right: 11px; vertical-align: middle;
+    background: var(--line-2);
+  }
+}
+
+.sec-lede {
+  margin: 0 0 clamp(22px, 2.4vw, 32px); max-width: var(--measure);
+  font-size: 17.5px; line-height: 1.72; color: var(--dim);
+}
+.sec-lede strong { color: var(--text); }
+
+/* 상단에 얇은 선 하나로 섹션을 여는 변형 */
+.sec--ruled { border-top: 1px solid var(--line); padding-top: clamp(30px, 3.4vw, 52px); }
+
+
+/* ═══ 상태 배지 ════════════════════════════════════════════════════
+   색만으로 구분되지 않도록 기호를 함께 붙인다.
+   = 두 자료가 같다 · ≠ 다르다 · ≈ 다르지만 허용오차 내 · · 단일 출처 */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 2px;
+  border: 1px solid currentColor;
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+}
+.badge::before { font-size: 13px; font-weight: 600; line-height: 1; }
+/* 코드 옆의 한글 뜻. 코드보다 한 단계 조용하게 두어 코드가 먼저 읽히게 한다. */
+.badge-ko {
+  font-family: var(--kr); font-style: normal; font-size: 13px; font-weight: 400;
+  letter-spacing: 0; text-transform: none; opacity: .82;
+  padding-left: 2px;
+}
+.badge.is-ok      { color: var(--ok);   background: var(--ok-soft); }
+.badge.is-ok::before      { content: "="; }
+.badge.is-warn    { color: var(--warn); background: var(--warn-soft); }
+.badge.is-warn::before    { content: "\2260"; }
+.badge.is-tol     { color: var(--tol);  background: var(--tol-soft); }
+.badge.is-tol::before     { content: "\2248"; }
+.badge.is-neutral { color: var(--none); background: var(--none-soft); }
+.badge.is-neutral::before { content: "\00B7"; }
+.badge--sm { padding: 2px 7px; font-size: 12px; letter-spacing: .09em; }
+
+/* 값의 층위 — 계산값 / 채택값 / 정격은 경쟁하는 값이 아니라 다른 질문의 답이다 */
+.kind {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .03em;
+  color: var(--dimmer);
+  border: 1px solid var(--line); border-radius: 2px; padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* 출처 칩 */
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.chips li {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .04em;
+  color: var(--dim); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 2px; padding: 4px 9px;
+}
+.chips li.is-dwg { color: var(--accent-deep); border-color: var(--accent-line); background: var(--accent-soft); }
+
+
+/* ═══ 향후 · 푸터 ══════════════════════════════════════════════════ */
+.future { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(14px, 1.6vw, 22px); }
+@media (min-width: 820px) { .future { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.future li { padding-top: 14px; border-top: 2px solid var(--accent-line); }
+.future .fu-l {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--accent);
+}
+.future .fu-t { display: block; margin-top: 8px; font-size: 15.5px; line-height: 1.68; color: var(--body); }
+
+.foot {
+  margin-top: var(--gap-sec);
+  padding: clamp(26px, 3vw, 40px) 0 clamp(34px, 4vw, 56px);
+  border-top: 1px solid var(--line);
+  display: grid; gap: 16px;
+}
+@media (min-width: 880px) { .foot { grid-template-columns: minmax(0, 1fr) auto; align-items: end; } }
+.foot p { margin: 0 0 5px; max-width: 78ch; font-size: 14.5px; line-height: 1.75; color: var(--dimmer); }
+.foot .made { color: var(--dim); }
+.foot .made strong { color: var(--text); font-weight: 500; }
+.foot-back {
+  font-family: var(--mono); font-size: 13px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dim); white-space: nowrap;
+}
+
+
+/* ═══ 인쇄 · 스크린샷 ══════════════════════════════════════════════
+   포스터에 넣을 스크린샷을 잡을 때 상단 바가 겹치지 않도록. */
+@media print {
+  .topbar { position: static; }
+  .sec-label { position: static; }
+  .cap:hover { background: none; }
+  body { font-size: 13.5px; }
+}
+
+
+/* ═══ 한글 라벨 되돌리기 ═══════════════════════════════════════════
+   자간 확대와 대문자 변환은 라틴의 장치다. 한글에서는 낱말이 흩어질 뿐이다.
+   되돌리는 규칙이므로 파일 맨 아래에 둔다 — 위쪽 언어 블록에 두면
+   .kpi .tile-label 같은 뒤쪽 규칙과 특이도가 같아 밀린다.
+
+   .ko 자식이 아니라 라벨 요소 자체를 겨냥한다 — 이 라벨들은 절반이 JS 로
+   그려져서 마크업에 .ko 래퍼가 없기 때문이다. 목록에서 빠진 것들
+   (.msg-t · .brand-sub · .badge · .pf-l · .flow-l)은 두 언어에서 모두
+   라틴 코드값을 담으므로 대문자와 넓은 자간을 그대로 둔다. */
+[data-lang="ko"] :is(
+  h2, .sec-no, .sec-q, .kicker, .tile-label, .nav a,
+  .pv-title, .eq-list-head, .q-side-head, .qg-t, .q-tag, .tq-tag, .vv-tag,
+  .vh-cq, .claim-doc, .op-note, .gc-t, .fu-l, .bh-t, .cap-go, .cap-n,
+  .foot-back, .dist h3, .siblings h3, .q-jump, .excerpt > summary,
+  .detail-dl dt, .bldg dt, .graph-cap .gc-t,
+  .qa2-who-t, .qa2-state, .qh-n, .map-dim .md-label, .badge-ko,
+  .f3-cap, .ex-kicker, .qa2-meta dt
+) {
+  letter-spacing: .02em; text-transform: none;
+}
+
+
+/* ═══ 온톨로지 그래프 ══════════════════════════════════════════════
+   graph.js 가 canvas 에 그린다. 두 자리에 쓴다 —
+   히어로 배경(장식이지만 실제 데이터)과 온톨로지 지도 섹션(상호작용).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 히어로 배경 ──
+   글자 뒤에 깔리는 자리다. 그래프가 아무리 예뻐도 글자를 읽는 데
+   방해가 되면 실패다. 그래서 캔버스 위에 흰 스크림을 두 겹 얹어
+   왼쪽 글 영역은 거의 흰색으로 눌러 두고, 오른쪽 위와 아래에서만
+   그래프가 드러나게 한다. */
+.hero { position: relative; }
+.hero > * { position: relative; z-index: 1; }
+
+.hero-bg {
+  position: absolute; z-index: 0;
+  /* 셸 밖으로 넘겨 화면 폭 전체를 쓴다 — 배경이 여백에서 끊기면 액자처럼 보인다 */
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 100vw; height: 100%;
+  pointer-events: none;   /* 글자 선택과 링크를 막지 않는다 */
+  overflow: hidden;
+}
+.hero-bg canvas { display: block; width: 100%; height: 100%; }
+
+/* 스크림 — 글 뒤는 짙게, 오른쪽 위는 그래프가 그대로 보이게.
+   두 겹을 겹치면 알파가 곱해져(1-(1-a1)(1-a2)) 실효 차단률이 훅 올라간다.
+   처음에 .60 과 .20 을 겹쳐 놓고 실효 .73 이 되어 그래프가 다 묻혔다.
+   그래서 가로 스크림은 전 구간에 걸고, 세로 스크림은 아래 45% 에만 건다 —
+   위쪽에서는 두 겹이 겹치지 않는다. */
+.hero-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    /* 아래쪽 — KPI 격자와 기능 카드가 서는 자리. 여기서는 완전히 지운다. */
+    linear-gradient(to bottom,
+      rgba(var(--scrim-rgb), 0)   0%,
+      rgba(var(--scrim-rgb), 0)   58%,
+      rgba(var(--scrim-rgb), .78) 76%,
+      rgba(var(--scrim-rgb), .98) 90%),
+    /* 왼쪽 — 제목과 본문이 서는 자리.
+       글이 놓인 27% 까지는 짙게 눌러 두고, 그 밖은 거의 열어 둔다.
+       처음에 48% 지점을 .44 로 두었더니 세로 스크림과 곱해져 배경이
+       사실상 백지가 되었다(실측 평균 254/255). */
+    linear-gradient(104deg,
+      rgba(var(--scrim-rgb), .95) 0%,
+      rgba(var(--scrim-rgb), .93) 32%,
+      rgba(var(--scrim-rgb), .74) 46%,
+      rgba(var(--scrim-rgb), .22) 57%,
+      rgba(var(--scrim-rgb), .08) 74%,
+      rgba(var(--scrim-rgb), .22) 100%);
+}
+@media (max-width: 1079px) {
+  /* 한 열로 접히면 히어로가 2,000px 넘게 길어진다. 배경을 그 높이에 맞춰
+     덮으면(cover) 그래프가 3배 이상 확대되어 노드가 덩어리로 보인다.
+     위쪽 띠로만 높이를 묶어 확대율을 정상으로 되돌린다. */
+  .hero-bg { height: min(100%, 560px); }
+  /* 한 열에서는 글이 화면 전체를 쓴다. 그래프는 위쪽 띠에만 남긴다. */
+  .hero-bg::after {
+    background:
+      linear-gradient(to bottom,
+        rgba(var(--scrim-rgb), .62) 0%,
+        rgba(var(--scrim-rgb), .90) 22%,
+        rgba(var(--scrim-rgb), .96) 60%);
+  }
+}
+
+/* 미리보기 패널은 그래프 위에 뜬다 — 불투명 흰 바탕과 옅은 그림자로
+   "위에 있는 것"이 분명해야 숫자가 읽힌다. */
+/* 어두운 바탕에서는 옅은 그림자가 보이지 않는다. 검은 그림자로 깊이를 주고,
+   그것만으로는 경계가 서지 않으므로 헤어라인 한 줄을 함께 둔다. */
+.preview {
+  background: var(--surface);
+  box-shadow: 0 2px 30px rgba(0, 0, 0, .45);
+  border: 1px solid var(--line);
+}
+.kpi, .cap { background: var(--surface); }
+.kpi { box-shadow: 0 2px 22px rgba(0, 0, 0, .35); }
+
+
+/* ── 온톨로지 지도 섹션 ── */
+.map-stage { position: relative; }
+/* 원형 다이어그램이므로 높이가 필요하다. 납작하면 바퀴가 작아지고
+   좌우에 빈 자리만 남는다. */
+.map-canvas {
+  display: block; width: 100%;
+  height: clamp(400px, 54vw, 760px);
+  cursor: crosshair;
+}
+.map-count {
+  position: absolute; right: 14px; top: 12px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .04em;
+  color: var(--dimmer); pointer-events: none; text-align: right; line-height: 1.6;
+}
+.map-count b { color: var(--accent-deep); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* 커서를 올린 노드의 정체 — 캔버스 밖 고정 자리에 쓴다.
+   따라다니는 말풍선은 커서가 가려 읽기 어렵고, 스크린샷에서도 자리가 흔들린다. */
+/* 범례 */
+.map-legend {
+  display: flex; flex-wrap: wrap; gap: 7px 16px;
+  list-style: none; margin: 14px 0 0; padding: 0;
+}
+.map-legend li {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .02em; color: var(--dim);
+}
+.map-legend i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+
+
+/* ── 2D / 3D 전환 ──
+   지도 위에 얹지 않고 캔버스 바로 위 한 줄로 둔다. 캔버스 안에 띄우면
+   회전하는 그림과 겹쳐 읽기 어렵고, 스크린샷에서도 자리가 흔들린다. */
+.map-dim {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--panel-2); border-bottom: 1px solid var(--line);
+}
+/* 자리 이름 — 참고자료의 잘게 자간을 벌린 소문자 라벨과 같은 방식 */
+.map-dim .md-label {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--dimmer);
+  padding-right: 2px;
+}
+.map-dim button {
+  cursor: pointer; font: inherit;
+  display: inline-flex; align-items: baseline; gap: 7px;
+  font-family: var(--mono); font-size: 14.5px; letter-spacing: .08em;
+  padding: 8px 15px; border: 1px solid var(--line-2); border-radius: 2px;
+  background: var(--surface); color: var(--dim);
+}
+.map-dim button em {
+  font-family: var(--kr); font-size: 13.5px; font-style: normal;
+  letter-spacing: 0; opacity: .78;
+}
+.map-dim button:hover { color: var(--accent-deep); border-color: var(--accent-line); }
+.map-dim button[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .map-dim button { transition: background .15s ease, color .15s ease, border-color .15s ease; }
+}
+.map-dim .md-note {
+  font-size: 13.5px; line-height: 1.5; color: var(--dim);
+  margin-left: 4px;
+}
+/* 3D 는 원근 때문에 세로 여유가 더 필요하다 */
+.map-canvas { height: clamp(400px, 56vw, 720px); }
+
+
+/* ═══ 등장 연출 ════════════════════════════════════════════════════
+   섹션이 화면에 들어올 때 살짝 올라오며 나타난다. 두 가지를 지킨다.
+
+   1) JS 가 <html> 에 .reveal 을 붙일 때만 숨는다. 스크립트가 실패하면
+      아무것도 감추지 않으므로 페이지는 그냥 정적으로 다 보인다.
+   2) 히어로는 대상이 아니다 — 첫 화면은 포스터 스크린샷으로 쓰이므로
+      스크롤 없이 그 자리에서 완성돼 있어야 한다.
+   ═══════════════════════════════════════════════════════════════ */
+/* 시작 자리는 JS 가 요소마다 정해 준다 — 도시공원 레퍼런스가 자치구 25조각을
+   '도심 바깥에서 날아와 제자리에 앉게' 만든 방식 그대로다.
+     --ox / --oy  제자리에서 얼마나 밖에 있다가 들어올지 (바깥 방향)
+     --o          등장 순서
+   전환은 .in 에만 걸어 둔다. 초기 상태에 걸면 첫 프레임에 한 번 튄다. */
+html.reveal .rv {
+  opacity: 0;
+  /* 파트 전체가 스크롤에 따라 올라오므로, 항목의 이동은 그 위에 얹히는
+     작은 시차 정도로만 남긴다. 둘 다 크게 움직이면 산만하다. */
+  transform: translate(calc(var(--ox, 0px) * .45), calc(var(--oy, 22px) * .5));
+}
+html.reveal .rv.in {
+  opacity: 1; transform: none;
+  /* 레퍼런스의 곡선을 그대로 쓴다. 감속이 아주 길어서 '날아와 앉는' 느낌이
+     나온다 — 짧은 ease 로는 그냥 나타났다가 끝난다. 불투명도는 이동보다
+     빨리 끝내야 글자가 흐린 채로 오래 남지 않는다. */
+  transition: opacity .7s ease,
+              transform 1.15s cubic-bezier(.18, .84, .26, 1);
+  transition-delay: calc(var(--o, 0) * 68ms);
+}
+
+/* 섹션에 도달했다는 표시 — 제목 아래 헤어라인이 왼쪽에서 그어진다.
+   파트가 넘어가는 순간이 눈에 걸려야 '넘어갔다'가 읽힌다. */
+.sec-label { position: relative; }
+html.reveal .sec-label::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -16px; height: 1px;
+  background: var(--accent-line);
+  transform: scaleX(0); transform-origin: 0 50%;
+}
+html.reveal .sec-label.in::after {
+  transform: scaleX(1);
+  transition: transform 1.1s cubic-bezier(.18, .84, .26, 1) 140ms;
+}
+
+/* ── 파트 전환 ── 스크롤 위치가 그대로 움직임이 된다.
+   --enter 는 JS 가 스크롤에서 계산해 넣는다(0 = 아직 아래, 1 = 제자리).
+   CSS 는 그 값을 위치와 불투명도로 옮기기만 한다. 시간 기반 전환이 아니므로
+   스크롤을 멈추면 움직임도 멈추고, 되감으면 되감긴다 — 레퍼런스와 같다.
+
+   transition 을 걸지 않는 것이 중요하다. 걸면 스크롤 값이 바뀔 때마다
+   보간이 끼어들어 손과 화면이 어긋난다. */
+html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
+  opacity: calc(.10 + .90 * var(--enter, 1));
+  transform: translate3d(0, calc((1 - var(--enter, 1)) * 44px), 0);
+  will-change: opacity, transform;
+}
+
+/* 페이지 어디쯤인지 — 상단 2px 띠. 스크롤 0 에서는 폭이 0 이라
+   포스터용 첫 화면 스크린샷에는 나오지 않는다. */
+.scroll-prog {
+  position: fixed; top: 0; left: 0; z-index: 40;
+  height: 2px; width: 0;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.reveal .rv { opacity: 1; transform: none; }
+  html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
+    opacity: 1; transform: none;
+  }
+  html.reveal .sec-label::after { transform: scaleX(1); }
+  /* 레퍼런스와 같은 처리 — 끄는 것이 아니라 사실상 0 으로 줄인다 */
+  html.reveal .rv.in { transition-duration: .01s; transition-delay: 0s; }
+  .scroll-prog { display: none; }
+}
+/* 인쇄에서는 스크롤이 없으므로 연출도 없다 — 숨은 채로 인쇄되면 안 된다 */
+@media print {
+  html.reveal .rv { opacity: 1 !important; transform: none !important; }
+  html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
+    opacity: 1 !important; transform: none !important;
+  }
+}
+
+
+/* ═══ 01 문서 → 온톨로지 ════════════════════════════════════════════
+   입력 · 변환 · 결과를 세 칸으로 나란히 둔다. 가운데 칸이 화살표 노릇을
+   하므로 따로 화살표 그림을 두지 않는다. 칸 사이는 헤어라인 한 줄.
+   ═══════════════════════════════════════════════════════════════ */
+.flow3 {
+  display: grid; gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 3px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1000px) {
+  .flow3 { grid-template-columns: 1fr 1.15fr 1fr; }
+}
+.f3-col { background: var(--surface); padding: clamp(18px, 1.8vw, 26px); }
+.f3-col--mid { background: var(--panel); }
+.f3-cap {
+  display: block; margin-bottom: 14px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent);
+}
+
+/* 입력 문서 */
+.f3-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.f3-docs li {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 9px 11px; border-radius: 2px; background: var(--panel);
+}
+.f3-docs .fd-kind {
+  font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .08em;
+  padding: 2px 7px; border-radius: 2px;
+  color: var(--on-accent); background: var(--dim);
+}
+.f3-docs li.is-pdf .fd-kind { background: var(--accent); }
+.f3-docs .fd-name {
+  font-size: 14px; color: var(--body);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.f3-docs .fd-refs {
+  font-size: 14.5px; font-weight: 700; color: var(--text);
+}
+
+/* 변환 단계 */
+.f3-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--line); }
+.f3-steps li {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  background: var(--panel); padding: 11px 12px;
+}
+.f3-steps .fs-n { grid-row: span 2; font-size: 13px; color: var(--dimmer); padding-top: 2px; }
+.f3-steps .fs-t { font-size: 15px; font-weight: 700; color: var(--text); }
+.f3-steps .fs-d { font-size: 13.5px; line-height: 1.62; color: var(--dim); }
+.f3-steps li.is-now { background: var(--accent-soft); }
+.f3-steps li.is-now .fs-t { color: var(--accent-deep); }
+
+/* 결과 수치 */
+.f3-out { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.f3-out li { display: grid; gap: 1px; }
+.f3-out b {
+  font-family: var(--mono); font-size: 30px; font-weight: 600;
+  letter-spacing: -.01em; color: var(--accent-deep); line-height: 1.1;
+}
+.f3-out .fo-l { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.f3-out .fo-n { font-size: 13px; color: var(--dim); }
+
+.f3-note {
+  margin: 14px 0 0; font-size: 13px; line-height: 1.65; color: var(--dim);
+}
+.f3-hand {
+  margin: clamp(22px, 2.4vw, 34px) 0 0;
+  max-width: var(--measure);
+  font-size: 16px; line-height: 1.75; color: var(--body);
+  border-left: 2px solid var(--accent); padding-left: 18px;
+}
+
+
+/* ═══ 02 온톨로지 탐색 ══════════════════════════════════════════════
+   오른쪽에 그래프, 왼쪽에 판독. 판독은 sticky 로 붙여 두어 그래프를
+   훑는 동안 시선이 위아래로 흔들리지 않게 한다.
+   ═══════════════════════════════════════════════════════════════ */
+.ex-grid { display: grid; gap: clamp(18px, 2vw, 30px); grid-template-columns: 1fr; }
+@media (min-width: 1080px) {
+  /* 판독이 그래프보다 좁다. 관계 목록은 한 줄이 짧아 넓힐 이유가 없고,
+     그래프는 넓을수록 노드가 겹치지 않는다. */
+  .ex-grid { grid-template-columns: minmax(300px, 27rem) minmax(0, 1fr); }
+}
+.ex-side { display: grid; gap: 14px; align-content: start; }
+@media (min-width: 1080px) {
+  .ex-side { position: sticky; top: 74px; }
+}
+.ex-read {
+  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--surface);
+  padding: clamp(16px, 1.6vw, 22px);
+  min-height: 22rem;
+}
+.ex-kicker {
+  display: block; margin-bottom: 10px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent);
+}
+.ex-lead { margin: 0 0 12px; font-size: 15px; line-height: 1.72; color: var(--body); }
+.ex-lead--dim { color: var(--dim); font-size: 14px; margin-bottom: 0; }
+
+.ex-node-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--line);
+}
+.ex-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
+}
+.ex-dot--big { width: 13px; height: 13px; }
+.ex-cls {
+  font-size: 14px; font-weight: 700; color: var(--text);
+}
+.ex-deg {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 12.5px; color: var(--dim);
+}
+.ex-label {
+  margin: 14px 0 16px;
+  font-family: var(--mono); font-size: 19px; font-weight: 600;
+  color: var(--accent-deep); line-height: 1.35;
+  word-break: break-all;
+}
+.ex-groups { display: grid; gap: 14px; }
+.ex-grp-h {
+  display: flex; align-items: baseline; gap: 8px;
+  padding-bottom: 6px;
+}
+.ex-arrow { font-family: var(--mono); font-size: 14px; color: var(--accent); }
+.ex-pred {
+  font-family: var(--mono); font-size: 13px; color: var(--body);
+}
+.ex-cnt {
+  margin-left: auto; font-size: 12px; color: var(--dimmer);
+}
+.ex-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--line); }
+.ex-items li {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--panel); padding: 7px 10px;
+}
+.ex-items .ex-il {
+  font-family: var(--mono); font-size: 13px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ex-items .ex-it {
+  margin-left: auto; font-size: 12px; color: var(--dim); white-space: nowrap;
+}
+
+.ex-legend {
+  list-style: none; margin: 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 3px; background: var(--panel);
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 12.5px; color: var(--dim);
+}
+.ex-legend li { display: flex; align-items: center; gap: 6px; }
+.ex-legend i { width: 8px; height: 8px; border-radius: 50%; }
+
+.ex-graph {
+  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--surface); overflow: hidden;
+}
+.ex-stage { position: relative; }
+.ex-count {
+  position: absolute; right: 14px; top: 12px; margin: 0;
+  font-family: var(--mono); font-size: 12.5px; color: var(--dim);
+}
+.ex-count b { color: var(--text); }
+
+
+/* ═══ 03 질의응답 ═══════════════════════════════════════════════════
+   왼쪽 질문·답변, 오른쪽 그래프. 답이 되는 노드가 그래프에서 밝아진 뒤
+   왼쪽 슬롯으로 내려앉는다.
+
+   노드는 <canvas> 안에 있어 CSS 로 움직일 수 없다. 그래서 노드의 화면
+   좌표에 조각(.qa2-chip)을 하나 만들어 겹쳐 놓고 그것을 옮긴다.
+   ═══════════════════════════════════════════════════════════════ */
+.qa2 { display: grid; gap: clamp(18px, 2vw, 30px); grid-template-columns: 1fr; }
+@media (min-width: 1080px) {
+  .qa2 { grid-template-columns: minmax(320px, 30rem) minmax(0, 1fr); }
+}
+.qa2-side { display: grid; gap: 14px; align-content: start; }
+@media (min-width: 1080px) {
+  /* 그래프가 660px 까지 오는데 왼쪽 칸은 그보다 짧다. 위로 몰아 두면
+     아래가 크게 비어 균형이 깨지므로 가운데에 맞춘다. */
+  .qa2-side { align-content: center; }
+}
+
+.qa2-who {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px;
+}
+.qa2-who-t {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--text);
+}
+.qa2-who-s { font-size: 13px; color: var(--dimmer); }
+.qa2-state {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+}
+
+/* 질문 — 왼쪽 굵은 선으로 '들어온 것'을 표시한다 */
+.qa2-ask { border-left: 2px solid var(--accent); padding-left: 18px; }
+.qa2-q {
+  margin: 0; min-height: 3.2em;
+  font-size: 25px; line-height: 1.36; font-weight: 700; color: var(--text);
+}
+@media (max-width: 1079px) { .qa2-q { font-size: 21px; } }
+/* 타이핑 중에는 막대를 하나 세운다 — 사람이 쓰는 중이라는 표시 */
+.qa2-q.is-typing::after {
+  content: ""; display: inline-block; width: .07em; height: 1.05em;
+  margin-left: .08em; vertical-align: -.16em;
+  background: var(--accent); animation: qaCaret 1s steps(1) infinite;
+}
+@keyframes qaCaret { 50% { opacity: 0; } }
+
+/* 답변 — 다른 면에 앉혀 질문과 갈라 놓는다 */
+.qa2-ans {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+  padding: 14px clamp(14px, 1.4vw, 20px) clamp(14px, 1.5vh, 18px);
+  transition: border-color .4s ease;
+}
+.qa2-ans.is-ready { border-color: var(--accent-line); }
+.qa2-ans .qa2-who { border-bottom: 1px solid var(--line); }
+
+/* 답 슬롯 — 몇 개가 올지 먼저 비워 두어 '채워진다'로 읽히게 한다 */
+.qa2-slots { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 1px; background: var(--line); }
+.qa2-slots .qs {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); padding: 10px 12px;
+  min-height: 2.6em;
+  opacity: .38;
+  transition: opacity .3s ease;
+}
+.qa2-slots .qs.is-on { opacity: 1; }
+.qa2-slots .qs-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--line-2);
+}
+.qa2-slots .qs-nm {
+  font-family: var(--mono); font-size: 13.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qa2-slots .qs-ty {
+  margin-left: auto; font-size: 12px; color: var(--dim); white-space: nowrap;
+}
+
+/* 근거 · 출처 · 조건 */
+.qa2-meta { margin: 14px 0 0; display: grid; gap: 8px; }
+.qa2-meta > div { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px; }
+.qa2-meta dt {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--dimmer);
+}
+.qa2-meta dd { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--body); }
+.qa2-meta .qm-note { border-top: 1px solid var(--line); padding-top: 10px; }
+.qa2-meta .qm-note dd { color: var(--text); }
+
+.qa2-graph {
+  position: relative;
+  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--surface); overflow: hidden;
+}
+.qa2-canvas { display: block; width: 100%; height: clamp(400px, 52vw, 660px); }
+/* 조각이 담기는 층. 캔버스와 같은 자리에 겹쳐 두고, 넘쳐도 잘리지 않게
+   한다 — 조각은 이 상자 밖(왼쪽 답변판)까지 날아간다. */
+.qa2-fly { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.qa2-chip {
+  position: absolute; transform: translate(-50%, -50%);
+  padding: 4px 9px; border-radius: 2px; white-space: nowrap;
+  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+  color: var(--on-accent); background: var(--c, #6ab4ff);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .5);
+  z-index: 5;
+}
+.qa2-chip.is-fly {
+  /* 레퍼런스와 같은 곡선. 감속이 길어 '날아가 앉는' 느낌이 난다. */
+  transition: transform .62s cubic-bezier(.22, .72, .2, 1), opacity .3s ease .38s;
+}
+.qa2-chip.is-done { opacity: 0; }
+
+.qa2-foot {
+  margin: clamp(20px, 2.2vw, 30px) 0 0;
+  max-width: var(--measure);
+  font-size: 14px; line-height: 1.7; color: var(--dim);
+  border-top: 1px solid var(--line); padding-top: 14px;
+}
+
+/* 캔버스는 그리는 자리가 좌표로 정해져 있어, 조각을 날리는 동안 옮기면
+   어긋난다. 이 파트는 파트 전환의 대상에서 뺀다. */
+html.parts #qa .qa2-graph { opacity: 1 !important; transform: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qa2-chip.is-fly { transition: none; }
+  .qa2-q.is-typing::after { animation: none; }
+}
