@@ -291,9 +291,11 @@ code {
   display: grid; gap: clamp(28px, 3.2vw, 52px);
   align-items: start;
 }
-@media (min-width: 1080px) {
-  .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(430px, 560px); }
-}
+/* 미리보기 패널을 뺀 뒤 한 칸이 되었다. 글이 셸 왼쪽 끝에 붙어 있으면
+   1920 에서 오른쪽이 통째로 비어 한쪽으로 쏠려 보인다. 글줄 길이는 그대로
+   두고 덩어리만 가운데로 옮긴다 — 글자를 가운데 정렬하면 왼쪽 기준선이
+   무너져 아래 파트들과 어긋난다. */
+.hero-main { max-width: 62rem; margin-inline: auto; width: 100%; }
 
 .kicker {
   margin: 0 0 14px;
@@ -845,11 +847,21 @@ html.reveal .sec-label.in::after {
 
    transition 을 걸지 않는 것이 중요하다. 걸면 스크롤 값이 바뀔 때마다
    보간이 끼어들어 손과 화면이 어긋난다. */
-html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
-  opacity: calc(.10 + .90 * var(--enter, 1));
-  transform: translate3d(0, calc((1 - var(--enter, 1)) * 44px), 0);
-  will-change: opacity, transform;
+html.parts .sec > .sec-in > *:not(.sec-label) {
+  /* 여기에 opacity 를 두지 않는다.
+     처음에는 calc(.10 + .90 * var(--enter)) 로 같이 흐리게 했는데, 스크롤이
+     중간에 멈추면 파트 전체가 반투명한 채로 남아 "아무것도 안 보인다"가 됐다.
+     실측으로 질의응답 칸이 0.557 에 멈춰 있었다 — 그 상태에서는 캔버스가
+     제대로 그려지고 있어도(픽셀 3,877개 확인) 화면에서는 사라진 것처럼 보인다.
+
+     움직임만으로도 '넘어간다'는 감각은 충분하다. 무엇이 보이는지 여부를
+     스크롤 위치에 맡기지 않는다. */
+  transform: translate3d(0, calc((1 - var(--enter, 1)) * 40px), 0);
+  will-change: transform;
 }
+/* 질의응답의 그래프 판은 아예 움직이지 않는다 — 노드를 날리는 좌표가
+   이 판을 기준으로 계산되므로, 판이 움직이면 조각이 엉뚱한 데 앉는다. */
+html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 
 /* 페이지 어디쯤인지 — 상단 2px 띠. 스크롤 0 에서는 폭이 0 이라
    포스터용 첫 화면 스크린샷에는 나오지 않는다. */
@@ -862,9 +874,7 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 
 @media (prefers-reduced-motion: reduce) {
   html.reveal .rv { opacity: 1; transform: none; }
-  html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
-    opacity: 1; transform: none;
-  }
+  html.parts .sec > .sec-in > *:not(.sec-label) { transform: none; }
   html.reveal .sec-label::after { transform: scaleX(1); }
   /* 레퍼런스와 같은 처리 — 끄는 것이 아니라 사실상 0 으로 줄인다 */
   html.reveal .rv.in { transition-duration: .01s; transition-delay: 0s; }
@@ -873,9 +883,7 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 /* 인쇄에서는 스크롤이 없으므로 연출도 없다 — 숨은 채로 인쇄되면 안 된다 */
 @media print {
   html.reveal .rv { opacity: 1 !important; transform: none !important; }
-  html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
-    opacity: 1 !important; transform: none !important;
-  }
+  html.parts .sec > .sec-in > *:not(.sec-label) { transform: none !important; }
 }
 
 
@@ -910,14 +918,16 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
    가로지르게 만들 수 없다 — 340% 를 줘도 62px 의 340% 밖에 못 간다. */
 .ing-in { position: relative; }
 .ing-doc {
-  position: absolute; top: 50%; left: 0;
+  /* 기본값을 '보이는 상태'로 둔다. opacity:0 으로 두고 애니메이션이 켜 주기를
+     기다리면, 애니메이션이 돌지 않는 환경(움직임 최소화 설정 · 인쇄 ·
+     스크립트 실패)에서 이 칸이 빈 상자가 된다. 실제로 그렇게 보였다. */
+  position: absolute; top: 50%;
   width: 54px; height: 72px;
   border: 1px solid var(--line-2); border-radius: 2px;
   background: var(--panel-2);
   display: flex; flex-direction: column; justify-content: center; gap: 7px;
   padding: 10px 9px;
-  opacity: 0;
-  transform: translateY(-50%);
+  transform: translateY(calc(-50% + var(--y, 0px)));
 }
 /* 종이 한 장이 접힌 모서리 */
 .ing-doc::after {
@@ -934,24 +944,29 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 .ing-doc.is-dwg i { background: var(--accent); opacity: .6; }
 
 /* 여섯 장이 차례로 흘러 들어간다. --d 는 순서, --y 는 들어오는 높이(px). */
-.ing-doc:nth-child(1) { --d: 0.0s; --y: -58px; }
-.ing-doc:nth-child(2) { --d: 0.7s; --y:   6px; }
-.ing-doc:nth-child(3) { --d: 1.4s; --y: -20px; }
-.ing-doc:nth-child(4) { --d: 2.1s; --y:  46px; }
-.ing-doc:nth-child(5) { --d: 2.8s; --y: -44px; }
-.ing-doc:nth-child(6) { --d: 3.5s; --y:  26px; }
+.ing-doc:nth-child(1) { --d: 0.0s; --y: -58px; left:  -6%; }
+.ing-doc:nth-child(2) { --d: 0.7s; --y:   6px; left:  12%; }
+.ing-doc:nth-child(3) { --d: 1.4s; --y: -20px; left:  30%; }
+.ing-doc:nth-child(4) { --d: 2.1s; --y:  46px; left:  48%; }
+.ing-doc:nth-child(5) { --d: 2.8s; --y: -44px; left:  66%; }
+.ing-doc:nth-child(6) { --d: 3.5s; --y:  26px; left:  84%; }
 
 .ing.is-on .ing-doc {
+  /* fill-mode 를 주지 않는다(기본 none). 지연 구간에는 기본 스타일 —
+     경로 위에 흩어져 보이는 상태 — 가 쓰여야 한다. both 를 주면 지연 동안
+     0% 프레임(투명)이 적용되어 칸이 비어 보인다. */
   animation: ingDoc 4.2s cubic-bezier(.42, .02, .58, 1) var(--d) infinite;
 }
+/* 0% 를 이미 보이는 상태로 둔다. 어느 프레임에 멈춰도 문서가 사라지지 않는다.
+   사라지는 것은 흡수되는 마지막 구간뿐이다. */
 @keyframes ingDoc {
   0% {
-    opacity: 0; left: -18%;
+    opacity: .55; left: -16%;
     transform: translateY(calc(-50% + var(--y))) rotate(-7deg) scale(1);
   }
-  16% { opacity: 1; }
+  12% { opacity: 1; }
   /* 가운데(흡수 지점)에 가까워지며 한 점으로 빨려 들어간다 */
-  70% { opacity: 1; }
+  72% { opacity: 1; }
   100% {
     opacity: 0; left: 102%;
     transform: translateY(-50%) rotate(4deg) scale(.16);
@@ -984,8 +999,8 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 .ing-out { width: 100%; height: 100%; color: var(--accent-line); }
 /* 뿌리 노드는 코어와 같은 뜻이라 두 번 크게 그리지 않는다 */
 .ing-out circle:nth-child(1) { fill: var(--accent-deep); }
-.ing-out circle { fill: var(--accent); opacity: 0; }
-.ing-out line { opacity: 0; stroke-dasharray: 1 1; }
+.ing-out circle { fill: var(--accent); }
+.ing-out line { stroke-dasharray: 1 1; }
 .ing.is-on .ing-out circle {
   animation: ingPop 4.2s ease-out calc(1.1s + var(--i) * .12s) infinite;
 }
@@ -1031,12 +1046,10 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* 움직임을 끄고, 다 만들어진 상태로 보여 준다 */
+  /* 움직임만 끈다. 기본 상태가 이미 '문서가 경로 위에 놓이고 그래프가
+     펼쳐진' 모습이므로 되돌릴 것이 없다. */
   .ing.is-on .ing-doc, .ing.is-on .ing-ring,
   .ing.is-on .ing-out circle, .ing.is-on .ing-out line { animation: none; }
-  .ing .ing-doc { opacity: 1; transform: translate(0, calc(-50% + var(--y))); }
-  .ing .ing-doc:nth-child(n+4) { display: none; }
-  .ing-out circle, .ing-out line { opacity: 1; }
 }
 
 
@@ -1254,10 +1267,6 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
   font-size: 14px; line-height: 1.7; color: var(--dim);
   border-top: 1px solid var(--line); padding-top: 14px;
 }
-
-/* 캔버스는 그리는 자리가 좌표로 정해져 있어, 조각을 날리는 동안 옮기면
-   어긋난다. 이 파트는 파트 전환의 대상에서 뺀다. */
-html.parts #qa .qa2-graph { opacity: 1 !important; transform: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .qa2-chip.is-fly { transition: none; }
