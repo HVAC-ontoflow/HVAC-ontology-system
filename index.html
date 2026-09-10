@@ -58,7 +58,7 @@
 
   <div class="hero-grid">
 
-    <div>
+    <div class="hero-main">
       <p class="kicker">
         <span class="ko">온톨로지 기반 건물 지식 탐색</span>
         <span class="en">Ontology-based Building Knowledge Explorer</span>
@@ -114,55 +114,12 @@
       </ol>
     </div>
 
-    <!-- 실제 ZHUA01 데이터로 만든 미리보기. app.js 가 KB.evidence 로 채운다. -->
-    <div class="preview" id="heroPreview" aria-label="근거 사슬 미리보기"></div>
 
   </div>
 
   <!-- 규모 지표 -->
   <div class="kpi" id="kpiStrip" aria-label="지식베이스 구축 규모"></div>
 
-  <!-- 기능 세 장 — 중요도 순서대로 근거추적 · 정보검증 · 장비탐색 -->
-  <div class="caps">
-    <a class="cap" href="#evidence">
-      <span class="cap-n">01</span>
-      <span class="cap-q"><span class="ko">왜 이 값인가?</span><span class="en">Why this value?</span></span>
-      <p class="cap-t"><span class="ko">설계근거 추적</span><span class="en">Trace Design Evidence</span></p>
-      <p class="cap-d">
-        <span class="ko">설계값 → 선정근거 → 계산식 → 설계조건 → 원문 쪽수까지 이어지는 근거 사슬</span>
-        <span class="en">the chain from a design value back through its basis, formula, conditions and source page</span>
-      </p>
-      <span class="cap-go">
-        <span class="ko">7,300 CMH의 근거 보기</span><span class="en">See what stands behind 7,300 CMH</span>
-      </span>
-    </a>
-
-    <a class="cap" href="#validation">
-      <span class="cap-n">02</span>
-      <span class="cap-q"><span class="ko">믿을 수 있나?</span><span class="en">Can it be trusted?</span></span>
-      <p class="cap-t"><span class="ko">정보 신뢰성 검토</span><span class="en">Validate Information</span></p>
-      <p class="cap-d">
-        <span class="ko">도면과 계산서를 대조해 교차검증 · 값 차이 · 허용오차를 구분</span>
-        <span class="en">drawings against calculations — cross-validated, divergent, or within tolerance</span>
-      </p>
-      <span class="cap-go">
-        <span class="ko">2.2 kW와 3.0 kW 사례 보기</span><span class="en">See the 2.2 kW vs 3.0 kW case</span>
-      </span>
-    </a>
-
-    <a class="cap" href="#explorer">
-      <span class="cap-n">03</span>
-      <span class="cap-q"><span class="ko">무엇인가?</span><span class="en">What is it?</span></span>
-      <p class="cap-t"><span class="ko">HVAC 설비 · 공간 탐색</span><span class="en">Explore HVAC</span></p>
-      <p class="cap-d">
-        <span class="ko">HVAC 설비 한 대의 사양 · 설치위치 · 담당 Zone · 부품 · 출처를 한 화면에</span>
-        <span class="en">one unit’s specifications, location, zone, parts and sources on a single screen</span>
-      </p>
-      <span class="cap-go">
-        <span class="ko">ZHUA01 프로필 보기</span><span class="en">Open the ZHUA01 profile</span>
-      </span>
-    </a>
-  </div>
 </section>
 
 
@@ -184,40 +141,41 @@
 
     <div>
       <p class="sec-lede">
-        <span class="ko">설계도면(DWG)과 설비계산서(PDF)를 그대로 입력했습니다.<br>
+        <span class="ko">설계도면과 설비계산서를 그대로 입력했습니다.<br>
           사람이 표를 옮겨 적은 것이 아니라, <strong>문서에서 개체 · 값 · 관계 · 출처를 뽑아
           자동으로 온톨로지를 만들었습니다.</strong></span>
-        <span class="en">Design drawings (DWG) and equipment calculation sheets (PDF) went in as they are.
+        <span class="en">Design drawings and equipment calculation sheets went in as they are.
           Nobody re-typed the tables: individuals, values, relations and their sources were
           extracted from the documents and assembled into the ontology automatically.</span>
       </p>
 
-      <div class="flow3">
-        <div class="f3-col">
-          <span class="f3-cap"><span class="ko">입력 · 설계문서</span><span class="en">Input · design documents</span></span>
-          <ul class="f3-docs" id="f3Docs"></ul>
-          <p class="f3-note">
-            <span class="ko">출처 참조 921개가 이 문서들을 가리킵니다.</span>
-            <span class="en">921 source references point back into these documents.</span>
-          </p>
+      <!-- 문서가 들어가서 온톨로지가 되는 그림.
+           파일 이름도 개수도 적지 않는다 — 읽을 것이 아니라 무슨 일이 일어나는지
+           한눈에 보이면 되는 자리다. 도면(괘선)과 문서(글줄)를 형태로만 구분한다.
+           연출은 CSS 애니메이션이고, 이 파트가 화면에 들어올 때 켜진다. -->
+      <div class="ing" id="ingStage" aria-hidden="true">
+        <div class="ing-in">
+          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
+          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
+          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
+          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
+          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
+          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
         </div>
 
-        <div class="f3-col f3-col--mid">
-          <span class="f3-cap"><span class="ko">변환</span><span class="en">Transform</span></span>
-          <ol class="f3-steps" id="f3Steps"></ol>
-        </div>
+        <div class="ing-core"><span class="ing-ring"></span><span class="ing-ring"></span></div>
 
-        <div class="f3-col">
-          <span class="f3-cap"><span class="ko">결과 · 온톨로지</span><span class="en">Output · ontology</span></span>
-          <ul class="f3-out" id="f3Out"></ul>
-          <p class="f3-note">
-            <span class="ko">TBox는 Brick 1.4.1을 어휘로 재사용하고, 근거 · 출처 · 값의 층위에
-              관한 문법은 자체 정의했습니다.</span>
-            <span class="en">The TBox reuses Brick 1.4.1 as its vocabulary; the grammar for evidence,
-              provenance and value layering is defined here.</span>
-          </p>
-        </div>
+        <svg class="ing-out" viewBox="0 0 470 200" preserveAspectRatio="xMinYMid meet">
+          <g class="ing-edges" stroke="currentColor" fill="none" stroke-width="1"></g>
+          <g class="ing-nodes"></g>
+        </svg>
       </div>
+
+      <p class="ing-cap">
+        <span class="ing-cap-l"><span class="ko">도면 · 계산서</span><span class="en">drawings &amp; calculations</span></span>
+        <span class="ing-cap-m"><span class="ko">자동 구조화</span><span class="en">automatic structuring</span></span>
+        <span class="ing-cap-r"><span class="ko">온톨로지</span><span class="en">ontology</span></span>
+      </p>
 
       <p class="f3-hand">
         <span class="ko">아래가 그 결과입니다 — 노드에 커서를 올리면 그 개체가 무엇이고
@@ -226,7 +184,6 @@
           and exactly what it hangs off.</span>
       </p>
     </div>
-  </div>
 </section>
 
 

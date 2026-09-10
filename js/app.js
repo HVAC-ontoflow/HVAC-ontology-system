@@ -91,91 +91,52 @@
     }).join('');
   });
 
-  /* 근거 사슬 미리보기 — 첫 화면에서 "값 하나에 이만큼이 매달려 있다"를 보인다.
-     KB.evidence[0].steps 의 모양을 그대로 쓴다:
-       {relation, node, title, value, unit, meta, source} */
-  register(function preview() {
-    var host = el('heroPreview');
-    if (!host || typeof KB === 'undefined' || !KB.evidence || !KB.evidence.length) return;
-    var ev = KB.evidence[0];
-    var head = ev.steps[0];
-    var L = lang() === 'ko';
+  /* ═══ 01 문서 → 온톨로지 ═══════════════════════════════════════════
+     오른쪽에서 자라나는 작은 그래프를 만든다. 실제 온톨로지의 모양이 아니라
+     "관계로 묶인 것이 나온다"는 것만 보이는 그림이므로, 좌표는 고정된 값을
+     쓴다 — 매번 달라지면 스크린샷이 매번 다른 그림이 된다. */
+  register(function ingest() {
+    var svg = document.querySelector('#ingStage .ing-out');
+    if (!svg) return;
+    var gN = svg.querySelector('.ing-nodes'), gE = svg.querySelector('.ing-edges');
+    if (gN.childNodes.length) return;   /* 한 번만 만든다 */
 
-    var rows = ev.steps.slice(1).map(function (st) {
-      return '<div class="pv-row">' +
-               '<span class="pv-rel">↑ ' + esc(st.relation) + '</span>' +
-               '<span class="pv-cls">' + esc(st.node) + '</span>' +
-               '<span class="pv-val">' + esc(st.value) + '</span>' +
-             '</div>';
-    }).join('');
+    /* 가운데에서 뻗어 나가는 세 갈래. [x, y, r] */
+    var P = [
+      [16, 100, 4.6],
+      [148, 54, 4.2], [148, 100, 4.2], [148, 146, 4.2],
+      [300, 26, 3], [300, 68, 3], [300, 108, 3], [300, 148, 3], [300, 182, 3],
+      [444, 14, 2.4], [444, 44, 2.4], [444, 84, 2.4], [444, 118, 2.4],
+      [444, 154, 2.4], [444, 190, 2.4]
+    ];
+    var L = [[0,1],[0,2],[0,3],
+             [1,4],[1,5],[2,6],[3,7],[3,8],
+             [4,9],[5,10],[6,11],[6,12],[7,13],[8,14]];
 
-    /* 값 상태 세 가지만 아래에 둔다. 단일출처 2,614 와 미해결 2 는 첫 화면에서
-       설명할 자리가 없어 빼고, 이 페이지의 §01 결과 칸에서 다룬다. */
-    var trio = KB.valueStatus.filter(function (v) {
-      return ['VERIFIED', 'DIVERGENT', 'TOLERANCE_OK'].indexOf(v.code) >= 0;
+    var NS = 'http://www.w3.org/2000/svg';
+    L.forEach(function (e, i) {
+      var ln = document.createElementNS(NS, 'line');
+      ln.setAttribute('x1', P[e[0]][0]); ln.setAttribute('y1', P[e[0]][1]);
+      ln.setAttribute('x2', P[e[1]][0]); ln.setAttribute('y2', P[e[1]][1]);
+      ln.style.setProperty('--i', i);
+      gE.appendChild(ln);
+    });
+    P.forEach(function (p, i) {
+      var c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]); c.setAttribute('r', p[2]);
+      c.style.setProperty('--i', i);
+      gN.appendChild(c);
     });
 
-    host.innerHTML =
-      '<div class="pv-head">' +
-        '<span class="pv-title">' + (L ? '근거 사슬' : 'Evidence chain') + '</span>' +
-        '<span class="pv-eq">' + esc(ev.equipment) + '</span>' +
-      '</div>' +
-      '<div class="pv-body">' +
-        '<span class="pv-prop">' + esc(ev.prop) + '</span>' +
-        '<div class="pv-value"><b class="num">' + esc(head.value) + '</b>' +
-          '<span class="unit">' + esc(head.unit) + '</span>' +
-          '<span class="badge is-ok">VERIFIED' +
-            (L ? '<i class="badge-ko">두 자료가 같음</i>' : '') + '</span>' +
-        '</div>' +
-        rows +
-        '<div class="pv-src">' + esc(head.source) + '</div>' +
-      '</div>' +
-      '<div class="pv-foot">' +
-        trio.map(function (st) {
-          return '<div class="is-' + st.tone + '">' +
-                 '<b class="pf-n num">' + fmt(st.count) + '</b>' +
-                 '<span class="pf-l">' + esc(st.code) + '</span></div>';
-        }).join('') +
-      '</div>';
-  });
-
-
-  /* ═══ 01 문서 → 온톨로지 ═══════════════════════════════════════════
-     입력 문서 · 변환 단계 · 결과 수치. 세 칸 모두 KB 값 그대로다. */
-  register(function build1() {
-    var docs = el('f3Docs'), steps = el('f3Steps'), out = el('f3Out');
-    if (!docs || typeof KB === 'undefined') return;
-
-    /* 입력 — 문서 5종과 각 문서를 가리키는 출처 참조 수 */
-    docs.innerHTML = KB.documents.map(function (d) {
-      var dwg = /\.dwg$/i.test(d.name);
-      return '<li class="' + (dwg ? 'is-dwg' : 'is-pdf') + '">' +
-               '<span class="fd-kind">' + (dwg ? 'DWG' : 'PDF') + '</span>' +
-               '<span class="fd-name">' + esc(d.name) + '</span>' +
-               '<span class="fd-refs num">' + fmt(d.refs) + '</span>' +
-             '</li>';
-    }).join('');
-
-    /* 변환 — 파이프라인. 화면에서는 이름과 한 줄 설명까지만 둔다. */
-    if (steps) {
-      steps.innerHTML = KB.pipeline.map(function (p, i) {
-        return '<li class="' + (p.highlight ? 'is-now' : '') + '">' +
-                 '<span class="fs-n num">' + String(i + 1).padStart(2, '0') + '</span>' +
-                 '<span class="fs-t">' + esc(t(p.name)) + '</span>' +
-                 '<span class="fs-d">' + esc(t(p.what)) + '</span>' +
-               '</li>';
-      }).join('');
-    }
-
-    /* 결과 — 규모 지표에서 네 개만. 여섯 개를 다시 늘어놓으면 히어로와 겹친다. */
-    if (out) {
-      var pick = [0, 1, 3, 4];
-      out.innerHTML = pick.map(function (k) {
-        var h = KB.scale.headline[k];
-        return '<li><b class="num">' + fmt(h.value) + '</b>' +
-               '<span class="fo-l">' + esc(t(h.label)) + '</span>' +
-               '<span class="fo-n">' + esc(t(h.note)) + '</span></li>';
-      }).join('');
+    /* 화면에 들어올 때 켠다. 위에서 이미 지나간 자리에서 혼자 돌고 있으면
+       프레임만 쓰고 아무도 보지 않는다. */
+    var stage = el('ingStage');
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(function (ens) {
+        ens.forEach(function (e) { stage.classList.toggle('is-on', e.isIntersecting); });
+      }, { threshold: 0.2 }).observe(stage);
+    } else {
+      stage.classList.add('is-on');
     }
   });
 
@@ -589,7 +550,13 @@
     if (qaCanvas) {
       /* 질의응답 쪽 그래프는 읽는 대상이 아니라 연출 무대다. 커서 판독을
          켜지 않고, 3D 로 두어 노드가 공간에 흩어져 있는 것이 보이게 한다. */
-      qaGraph = OG.create(qaCanvas, { threeD: true });
+      /* dimFloor 를 올려 준다. 답이 되는 노드만 밝히면 나머지가 거의 사라져
+         "그래프에서 찾았다"가 아니라 "빈 화면에 몇 개 떠 있다"로 보였다 —
+         두 번째 문항부터 그래프가 안 보인다는 말이 이것이었다. */
+      qaGraph = OG.create(qaCanvas, {
+        threeD: true,
+        dimFloor: { edge: 0.16, node: 0.44 }
+      });
       QA = qaResolve();
 
       if (window.IntersectionObserver) {

@@ -106,6 +106,12 @@
        질의응답에서 답이 되는 노드만 밝히는 데 필요하다. hover 와 같은
        집합(hoverEdges · hoverNodes)을 재사용하므로 그리는 코드는 그대로다. */
     var focused = false;
+    /* 눌린 쪽의 바닥값. hover 판독(02)에서는 낮게 두어 이웃이 도드라지게 하고,
+       질의응답(03)에서는 높게 두어 배경 그래프가 남아 있게 한다. */
+    var DIMF = {
+      edge: (opts.dimFloor && opts.dimFloor.edge) || 0.09,
+      node: (opts.dimFloor && opts.dimFloor.node) || 0.26
+    };
 
     /* 2D ↔ 3D. morph 가 목표값을 향해 부드럽게 따라간다. */
     var want3 = has3 && (opts.threeD === true);
@@ -249,7 +255,7 @@
         /* 눌린 쪽의 바닥값을 .05 → .09 로 올렸다. 질의응답에서 답이 되는
            노드만 밝히면 나머지가 거의 사라져 '그래프 위에서 찾았다'가 아니라
            '빈 화면에 몇 개 떠 있다'로 보였다. */
-        var al = (isHero ? 0.30 : (dim ? (lit ? 0.75 : 0.09) : 0.22)) * prog;
+        var al = (isHero ? 0.30 : (dim ? (lit ? 0.75 : DIMF.edge) : 0.22)) * prog;
         /* 깊이 안개 — 뒤로 갈수록 옅게. 이게 없으면 구가 평면처럼 보인다. */
         if (morph > 0.001) {
           var zAvg = (a.z + b.z) / 2;
@@ -279,7 +285,7 @@
         var n = N[j], ty = TYPES[n.t] || TYPES.src, p = pt[j];
         var rr = (ty.r + Math.min(2.6, Math.sqrt(n.d) * 0.6)) * (isHero ? 0.9 : 1);
         var litN = !isHero && dim && hoverNodes.has(j);
-        var al2 = (isHero ? 0.88 : (dim ? (litN ? 1 : 0.26) : 0.92)) * prog;
+        var al2 = (isHero ? 0.88 : (dim ? (litN ? 1 : DIMF.node) : 0.92)) * prog;
         if (morph > 0.001) {
           rr *= 1 + morph * (p.k - 1);                       /* 원근 크기 */
           al2 *= 1 - morph * (1 - (0.20 + 0.80 * p.z));      /* 깊이 안개 */

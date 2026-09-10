@@ -643,7 +643,7 @@ h2 {
   .foot-back, .dist h3, .siblings h3, .q-jump, .excerpt > summary,
   .detail-dl dt, .bldg dt, .graph-cap .gc-t,
   .qa2-who-t, .qa2-state, .qh-n, .map-dim .md-label, .badge-ko,
-  .f3-cap, .ex-kicker, .qa2-meta dt
+  .ing-cap, .ex-kicker, .qa2-meta dt
 ) {
   letter-spacing: .02em; text-transform: none;
 }
@@ -880,75 +880,163 @@ html.parts .sec:not(.qa) > .sec-in > *:not(.sec-label) {
 
 
 /* ═══ 01 문서 → 온톨로지 ════════════════════════════════════════════
-   입력 · 변환 · 결과를 세 칸으로 나란히 둔다. 가운데 칸이 화살표 노릇을
-   하므로 따로 화살표 그림을 두지 않는다. 칸 사이는 헤어라인 한 줄.
+   문서가 들어가서 온톨로지가 되는 그림. 파일 이름도 개수도 적지 않는다 —
+   읽을 것이 아니라 무슨 일이 일어나는지 한눈에 보이면 되는 자리다.
+   도면(괘선 네 줄)과 문서(글줄 네 줄)를 형태로만 구분한다.
+
+   연출은 전부 CSS 애니메이션이고 .is-on 이 붙을 때만 돈다. 화면에 없는 동안
+   돌려 두면 프레임만 쓰고 아무도 보지 않는다.
    ═══════════════════════════════════════════════════════════════ */
-.flow3 {
-  display: grid; gap: 1px; background: var(--line);
+.ing {
+  position: relative;
+  display: grid; grid-template-columns: 1fr auto 1.35fr;
+  /* align-items: center + 자식의 height:100% 는 서로를 참조해 0 으로 풀린다.
+     그래서 문서가 칸 아래쪽에 몰려 붙었다. stretch 로 칸을 채우게 둔다. */
+  align-items: stretch; gap: clamp(10px, 1.6vw, 26px);
+  height: clamp(230px, 26vw, 330px);
+  padding: clamp(14px, 1.6vw, 24px);
   border: 1px solid var(--line); border-radius: 3px;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 1000px) {
-  .flow3 { grid-template-columns: 1fr 1.15fr 1fr; }
-}
-.f3-col { background: var(--surface); padding: clamp(18px, 1.8vw, 26px); }
-.f3-col--mid { background: var(--panel); }
-.f3-cap {
-  display: block; margin-bottom: 14px;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
-  text-transform: uppercase; color: var(--accent);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-/* 입력 문서 */
-.f3-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.f3-docs li {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
-  padding: 9px 11px; border-radius: 2px; background: var(--panel);
+/* ── 왼쪽 · 들어가는 문서 ──
+   크기를 px 로 못박는다. 처음에 width: clamp(...) + aspect-ratio + 퍼센트
+   padding/gap 으로 짰더니 서로가 서로를 참조하는 순환이 생겨, 선언한 폭(62px)이
+   아니라 높이에서 역산된 폭(140px)이 쓰였다. 장식용 고정 크기 요소에
+   퍼센트와 aspect-ratio 를 섞을 이유가 없다.
+
+   이동은 left 로 한다. transform 의 퍼센트는 자기 폭 기준이라 컨테이너를
+   가로지르게 만들 수 없다 — 340% 를 줘도 62px 의 340% 밖에 못 간다. */
+.ing-in { position: relative; }
+.ing-doc {
+  position: absolute; top: 50%; left: 0;
+  width: 54px; height: 72px;
+  border: 1px solid var(--line-2); border-radius: 2px;
+  background: var(--panel-2);
+  display: flex; flex-direction: column; justify-content: center; gap: 7px;
+  padding: 10px 9px;
+  opacity: 0;
+  transform: translateY(-50%);
 }
-.f3-docs .fd-kind {
-  font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .08em;
-  padding: 2px 7px; border-radius: 2px;
-  color: var(--on-accent); background: var(--dim);
+/* 종이 한 장이 접힌 모서리 */
+.ing-doc::after {
+  content: ""; position: absolute; right: -1px; top: -1px;
+  width: 13px; height: 13px;
+  background: var(--bg);
+  border-left: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
 }
-.f3-docs li.is-pdf .fd-kind { background: var(--accent); }
-.f3-docs .fd-name {
-  font-size: 14px; color: var(--body);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.ing-doc i { display: block; height: 1px; background: var(--dimmer); }
+/* 문서는 글줄이 들쭉날쭉하고, 도면은 괘선이 고르다 */
+.ing-doc.is-pdf i:nth-child(2) { width: 72%; }
+.ing-doc.is-pdf i:nth-child(4) { width: 54%; }
+.ing-doc.is-dwg { background: var(--panel-3); }
+.ing-doc.is-dwg i { background: var(--accent); opacity: .6; }
+
+/* 여섯 장이 차례로 흘러 들어간다. --d 는 순서, --y 는 들어오는 높이(px). */
+.ing-doc:nth-child(1) { --d: 0.0s; --y: -58px; }
+.ing-doc:nth-child(2) { --d: 0.7s; --y:   6px; }
+.ing-doc:nth-child(3) { --d: 1.4s; --y: -20px; }
+.ing-doc:nth-child(4) { --d: 2.1s; --y:  46px; }
+.ing-doc:nth-child(5) { --d: 2.8s; --y: -44px; }
+.ing-doc:nth-child(6) { --d: 3.5s; --y:  26px; }
+
+.ing.is-on .ing-doc {
+  animation: ingDoc 4.2s cubic-bezier(.42, .02, .58, 1) var(--d) infinite;
 }
-.f3-docs .fd-refs {
-  font-size: 14.5px; font-weight: 700; color: var(--text);
+@keyframes ingDoc {
+  0% {
+    opacity: 0; left: -18%;
+    transform: translateY(calc(-50% + var(--y))) rotate(-7deg) scale(1);
+  }
+  16% { opacity: 1; }
+  /* 가운데(흡수 지점)에 가까워지며 한 점으로 빨려 들어간다 */
+  70% { opacity: 1; }
+  100% {
+    opacity: 0; left: 102%;
+    transform: translateY(-50%) rotate(4deg) scale(.16);
+  }
 }
 
-/* 변환 단계 */
-.f3-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--line); }
-.f3-steps li {
-  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
-  background: var(--panel); padding: 11px 12px;
+/* ── 가운데 · 흡수 지점 ── */
+.ing-core {
+  position: relative; align-self: center;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
 }
-.f3-steps .fs-n { grid-row: span 2; font-size: 13px; color: var(--dimmer); padding-top: 2px; }
-.f3-steps .fs-t { font-size: 15px; font-weight: 700; color: var(--text); }
-.f3-steps .fs-d { font-size: 13.5px; line-height: 1.62; color: var(--dim); }
-.f3-steps li.is-now { background: var(--accent-soft); }
-.f3-steps li.is-now .fs-t { color: var(--accent-deep); }
+.ing-core::before {
+  content: ""; width: 34%; aspect-ratio: 1; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px 2px var(--accent-soft);
+}
+.ing-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid var(--accent-line); opacity: 0;
+}
+.ing.is-on .ing-ring { animation: ingRing 2.1s ease-out infinite; }
+.ing.is-on .ing-ring:nth-child(2) { animation-delay: 1.05s; }
+@keyframes ingRing {
+  0%   { opacity: .8; transform: scale(.35); }
+  100% { opacity: 0;  transform: scale(1.5); }
+}
 
-/* 결과 수치 */
-.f3-out { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-.f3-out li { display: grid; gap: 1px; }
-.f3-out b {
-  font-family: var(--mono); font-size: 30px; font-weight: 600;
-  letter-spacing: -.01em; color: var(--accent-deep); line-height: 1.1;
+/* ── 오른쪽 · 자라나는 온톨로지 ── */
+.ing-out { width: 100%; height: 100%; color: var(--accent-line); }
+/* 뿌리 노드는 코어와 같은 뜻이라 두 번 크게 그리지 않는다 */
+.ing-out circle:nth-child(1) { fill: var(--accent-deep); }
+.ing-out circle { fill: var(--accent); opacity: 0; }
+.ing-out line { opacity: 0; stroke-dasharray: 1 1; }
+.ing.is-on .ing-out circle {
+  animation: ingPop 4.2s ease-out calc(1.1s + var(--i) * .12s) infinite;
 }
-.f3-out .fo-l { font-size: 14.5px; font-weight: 700; color: var(--text); }
-.f3-out .fo-n { font-size: 13px; color: var(--dim); }
+.ing.is-on .ing-out line {
+  animation: ingLine 4.2s ease-out calc(1.0s + var(--i) * .12s) infinite;
+}
+@keyframes ingPop {
+  0%, 8% { opacity: 0; transform: scale(.2); }
+  22%    { opacity: 1; transform: scale(1); }
+  78%    { opacity: 1; }
+  100%   { opacity: 0; }
+}
+@keyframes ingLine {
+  0%, 6% { opacity: 0; }
+  24%    { opacity: 1; }
+  78%    { opacity: 1; }
+  100%   { opacity: 0; }
+}
 
-.f3-note {
-  margin: 14px 0 0; font-size: 13px; line-height: 1.65; color: var(--dim);
+/* 세 자리에 이름만 붙인다 */
+.ing-cap {
+  display: grid; grid-template-columns: 1fr auto 1.35fr;
+  gap: clamp(10px, 1.6vw, 26px);
+  margin: 10px 0 0; padding: 0 clamp(14px, 1.6vw, 24px);
+  font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dimmer);
 }
+.ing-cap .ing-cap-m { color: var(--accent); white-space: nowrap; }
+.ing-cap .ing-cap-r { text-align: right; }
+
 .f3-hand {
   margin: clamp(22px, 2.4vw, 34px) 0 0;
   max-width: var(--measure);
   font-size: 16px; line-height: 1.75; color: var(--body);
   border-left: 2px solid var(--accent); padding-left: 18px;
+}
+
+@media (max-width: 720px) {
+  /* 좁은 화면에서는 세 칸이 다 들어가지 않는다. 오른쪽 그래프를 키우고
+     문서는 두 장 폭만 남긴다. */
+  .ing, .ing-cap { grid-template-columns: .7fr auto 1.5fr; }
+  .ing { height: 200px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 움직임을 끄고, 다 만들어진 상태로 보여 준다 */
+  .ing.is-on .ing-doc, .ing.is-on .ing-ring,
+  .ing.is-on .ing-out circle, .ing.is-on .ing-out line { animation: none; }
+  .ing .ing-doc { opacity: 1; transform: translate(0, calc(-50% + var(--y))); }
+  .ing .ing-doc:nth-child(n+4) { display: none; }
+  .ing-out circle, .ing-out line { opacity: 1; }
 }
 
 
