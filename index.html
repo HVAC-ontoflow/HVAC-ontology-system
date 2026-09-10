@@ -150,30 +150,110 @@
       </p>
 
       <!-- 문서가 들어가서 온톨로지가 되는 그림.
-           파일 이름도 개수도 적지 않는다 — 읽을 것이 아니라 무슨 일이 일어나는지
-           한눈에 보이면 되는 자리다. 도면(괘선)과 문서(글줄)를 형태로만 구분한다.
-           연출은 CSS 애니메이션이고, 이 파트가 화면에 들어올 때 켜진다. -->
-      <div class="ing" id="ingStage" aria-hidden="true">
-        <div class="ing-in">
-          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
-          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
-          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
-          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
-          <span class="ing-doc is-dwg"><i></i><i></i><i></i><i></i></span>
-          <span class="ing-doc is-pdf"><i></i><i></i><i></i><i></i></span>
+           오른쪽 캔버스는 ontology.ttl 에서 뽑은 실제 부분 그래프다(484노드).
+           손으로 찍은 점 몇 개로는 "관계로 묶인 지식"의 밀도가 나오지 않는다.
+           왼쪽에서 도면·계산서 시트가 그 중심으로 빨려 들어가며 사라진다.
+
+           파일 이름도 개수도 적지 않는다 — 무슨 일이 일어나는지만 보이면 된다.
+           도면은 표제란·괘선·설비기호·치수선, 계산서는 머리글·표·숫자 열로
+           형태만 구분한다. -->
+      <div class="ing" id="ingStage">
+        <canvas class="ing-canvas" id="ingGraph" aria-hidden="true"></canvas>
+        <div class="ing-docs" aria-hidden="true">
+          <span class="ing-sheet is-dwg" style="--d:0.0s; --y:-64px; --r:-8deg">
+            <svg viewBox="0 0 132 172" aria-hidden="true">
+              <rect class="pg" x="1" y="1" width="130" height="170" rx="1"/>
+              <rect class="fr" x="8" y="8" width="116" height="140"/>
+              <g class="gr">
+                <path d="M8 44h116M8 80h116M8 116h116M44 8v140M88 8v140"/>
+              </g>
+              <g class="sym">
+                <rect x="18" y="18" width="20" height="14"/><circle cx="28" cy="25" r="3.4"/>
+                <rect x="54" y="54" width="24" height="16"/><circle cx="66" cy="62" r="4"/>
+                <rect x="96" y="92" width="18" height="12"/><circle cx="105" cy="98" r="3"/>
+                <path d="M38 25h16M78 62h18M28 32v22M66 70v22"/>
+              </g>
+              <g class="dim">
+                <path d="M18 136h96"/><path d="M18 132v8M114 132v8"/>
+              </g>
+              <g class="tb">
+                <rect x="8" y="152" width="116" height="16"/>
+                <path d="M60 152v16M92 152v16"/>
+                <path class="ln" d="M14 160h40M66 160h20M98 160h20"/>
+              </g>
+            </svg>
+          </span>
+          <span class="ing-sheet is-pdf" style="--d:1.1s; --y:30px; --r:6deg">
+            <svg viewBox="0 0 132 172" aria-hidden="true">
+              <rect class="pg" x="1" y="1" width="130" height="170" rx="1"/>
+              <rect class="hd" x="8" y="10" width="116" height="14"/>
+              <path class="ln" d="M14 17h44"/>
+              <g class="rows">
+                <path d="M8 34h116M8 50h116M8 66h116M8 82h116M8 98h116M8 114h116M8 130h116"/>
+              </g>
+              <g class="lb">
+                <path d="M13 42h34M13 58h40M13 74h30M13 90h38M13 106h34M13 122h28"/>
+              </g>
+              <g class="nm">
+                <rect x="86" y="38" width="32" height="6"/><rect x="92" y="54" width="26" height="6"/>
+                <rect x="82" y="70" width="36" height="6"/><rect x="94" y="86" width="24" height="6"/>
+                <rect x="88" y="102" width="30" height="6"/><rect x="96" y="118" width="22" height="6"/>
+              </g>
+              <rect class="hi" x="8" y="66" width="116" height="16"/>
+              <g class="ft"><path class="ln" d="M13 146h52M84 146h34"/></g>
+            </svg>
+          </span>
+          <span class="ing-sheet is-dwg" style="--d:2.2s; --y:-18px; --r:4deg">
+            <svg viewBox="0 0 132 172" aria-hidden="true">
+              <rect class="pg" x="1" y="1" width="130" height="170" rx="1"/>
+              <rect class="fr" x="8" y="8" width="116" height="140"/>
+              <g class="gr">
+                <path d="M8 44h116M8 80h116M8 116h116M44 8v140M88 8v140"/>
+              </g>
+              <g class="sym">
+                <rect x="18" y="18" width="20" height="14"/><circle cx="28" cy="25" r="3.4"/>
+                <rect x="54" y="54" width="24" height="16"/><circle cx="66" cy="62" r="4"/>
+                <rect x="96" y="92" width="18" height="12"/><circle cx="105" cy="98" r="3"/>
+                <path d="M38 25h16M78 62h18M28 32v22M66 70v22"/>
+              </g>
+              <g class="dim">
+                <path d="M18 136h96"/><path d="M18 132v8M114 132v8"/>
+              </g>
+              <g class="tb">
+                <rect x="8" y="152" width="116" height="16"/>
+                <path d="M60 152v16M92 152v16"/>
+                <path class="ln" d="M14 160h40M66 160h20M98 160h20"/>
+              </g>
+            </svg>
+          </span>
+          <span class="ing-sheet is-pdf" style="--d:3.3s; --y:62px; --r:-5deg">
+            <svg viewBox="0 0 132 172" aria-hidden="true">
+              <rect class="pg" x="1" y="1" width="130" height="170" rx="1"/>
+              <rect class="hd" x="8" y="10" width="116" height="14"/>
+              <path class="ln" d="M14 17h44"/>
+              <g class="rows">
+                <path d="M8 34h116M8 50h116M8 66h116M8 82h116M8 98h116M8 114h116M8 130h116"/>
+              </g>
+              <g class="lb">
+                <path d="M13 42h34M13 58h40M13 74h30M13 90h38M13 106h34M13 122h28"/>
+              </g>
+              <g class="nm">
+                <rect x="86" y="38" width="32" height="6"/><rect x="92" y="54" width="26" height="6"/>
+                <rect x="82" y="70" width="36" height="6"/><rect x="94" y="86" width="24" height="6"/>
+                <rect x="88" y="102" width="30" height="6"/><rect x="96" y="118" width="22" height="6"/>
+              </g>
+              <rect class="hi" x="8" y="66" width="116" height="16"/>
+              <g class="ft"><path class="ln" d="M13 146h52M84 146h34"/></g>
+            </svg>
+          </span>
         </div>
-
-        <div class="ing-core"><span class="ing-ring"></span><span class="ing-ring"></span></div>
-
-        <svg class="ing-out" viewBox="0 0 470 200" preserveAspectRatio="xMinYMid meet">
-          <g class="ing-edges" stroke="currentColor" fill="none" stroke-width="1"></g>
-          <g class="ing-nodes"></g>
-        </svg>
+        <span class="ing-core" aria-hidden="true">
+          <i class="ing-ring"></i><i class="ing-ring"></i>
+        </span>
       </div>
 
       <p class="ing-cap">
         <span class="ing-cap-l"><span class="ko">도면 · 계산서</span><span class="en">drawings &amp; calculations</span></span>
-        <span class="ing-cap-m"><span class="ko">자동 구조화</span><span class="en">automatic structuring</span></span>
         <span class="ing-cap-r"><span class="ko">온톨로지</span><span class="en">ontology</span></span>
       </p>
 
@@ -276,11 +356,16 @@
           </div>
         </div>
 
-        <!-- 오른쪽 — 그래프 + 날아가는 조각이 담기는 층 -->
+        <!-- 오른쪽 — 그래프 -->
         <div class="qa2-graph">
           <canvas class="qa2-canvas" id="qaGraph" aria-hidden="true"></canvas>
-          <div class="qa2-fly" id="qaFly" aria-hidden="true"></div>
         </div>
+
+        <!-- 날아가는 조각이 담기는 층.
+             그래프 상자 안에 두면 overflow:hidden 에 잘려서, 조각이 왼쪽
+             답변판으로 내려앉는 구간이 보이지 않는다. 두 칸을 함께 덮는
+             .qa2 위에 둔다. -->
+        <div class="qa2-fly" id="qaFly" aria-hidden="true"></div>
       </div>
 
       <p class="qa2-foot">

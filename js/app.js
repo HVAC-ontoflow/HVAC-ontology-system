@@ -92,49 +92,22 @@
   });
 
   /* ═══ 01 문서 → 온톨로지 ═══════════════════════════════════════════
-     오른쪽에서 자라나는 작은 그래프를 만든다. 실제 온톨로지의 모양이 아니라
-     "관계로 묶인 것이 나온다"는 것만 보이는 그림이므로, 좌표는 고정된 값을
-     쓴다 — 매번 달라지면 스크린샷이 매번 다른 그림이 된다. */
+     오른쪽 그래프는 02 와 같은 실제 부분 그래프다. 여기서는 읽는 대상이 아니라
+     "이만큼이 관계로 묶여 나온다"를 보이는 자리이므로 커서 판독을 켜지 않는다.
+     시트가 그래프 가운데로 빨려 들어가므로 평면(2D)으로 둔다 — 회전하는 구
+     위로 시트가 지나가면 어디로 들어가는지가 흐려진다. */
+  var ingGraph = null;
+
   register(function ingest() {
-    var svg = document.querySelector('#ingStage .ing-out');
-    if (!svg) return;
-    var gN = svg.querySelector('.ing-nodes'), gE = svg.querySelector('.ing-edges');
-    if (gN.childNodes.length) return;   /* 한 번만 만든다 */
-
-    /* 가운데에서 뻗어 나가는 세 갈래. [x, y, r] */
-    var P = [
-      [16, 100, 4.6],
-      [148, 54, 4.2], [148, 100, 4.2], [148, 146, 4.2],
-      [300, 26, 3], [300, 68, 3], [300, 108, 3], [300, 148, 3], [300, 182, 3],
-      [444, 14, 2.4], [444, 44, 2.4], [444, 84, 2.4], [444, 118, 2.4],
-      [444, 154, 2.4], [444, 190, 2.4]
-    ];
-    var L = [[0,1],[0,2],[0,3],
-             [1,4],[1,5],[2,6],[3,7],[3,8],
-             [4,9],[5,10],[6,11],[6,12],[7,13],[8,14]];
-
-    var NS = 'http://www.w3.org/2000/svg';
-    L.forEach(function (e, i) {
-      var ln = document.createElementNS(NS, 'line');
-      ln.setAttribute('x1', P[e[0]][0]); ln.setAttribute('y1', P[e[0]][1]);
-      ln.setAttribute('x2', P[e[1]][0]); ln.setAttribute('y2', P[e[1]][1]);
-      ln.style.setProperty('--i', i);
-      gE.appendChild(ln);
-    });
-    P.forEach(function (p, i) {
-      var c = document.createElementNS(NS, 'circle');
-      c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]); c.setAttribute('r', p[2]);
-      c.style.setProperty('--i', i);
-      gN.appendChild(c);
-    });
-
-    /* 화면에 들어올 때 켠다. 위에서 이미 지나간 자리에서 혼자 돌고 있으면
-       프레임만 쓰고 아무도 보지 않는다. */
     var stage = el('ingStage');
+    if (!stage || stage.dataset.wired) return;
+    stage.dataset.wired = '1';
+
+    /* 화면에 들어올 때만 돌린다. 지나간 자리에서 혼자 돌면 프레임만 쓴다. */
     if (window.IntersectionObserver) {
       new IntersectionObserver(function (ens) {
         ens.forEach(function (e) { stage.classList.toggle('is-on', e.isIntersecting); });
-      }, { threshold: 0.2 }).observe(stage);
+      }, { threshold: 0.15 }).observe(stage);
     } else {
       stage.classList.add('is-on');
     }
@@ -308,7 +281,7 @@
                  en: 'Which documents does the ZHUA01 design air flow of 7,300 CMH come from?' },
             kind: { ko: '근거 추적', en: 'Evidence trace' },
             anchor: eq, via: v7,
-            nodes: srcs.slice(0, 5),
+            nodes: srcs.slice(0, 4),
             meta: [
               { k: { ko: '값', en: 'Value' }, v: '7,300 CMH' },
               { k: { ko: '관계', en: 'Relation' }, v: 'hasQuantityValue → sourcedFrom' },
@@ -329,7 +302,7 @@
                en: 'What parts is ZHUA01 made of?' },
           kind: { ko: '부품 구성', en: 'Composition' },
           anchor: eq,
-          nodes: parts.slice(0, 5),
+          nodes: parts.slice(0, 4),
           meta: [
             { k: { ko: '관계', en: 'Relation' }, v: 'brick:hasPart' },
             { k: { ko: '부품 수', en: 'Parts' }, v: String(parts.length) },
@@ -350,7 +323,7 @@
         q: { ko: '정격값과 계산값이 어긋난 값은 어떤 것인가',
              en: 'Which values disagree between the rated and the calculated figure?' },
         kind: { ko: '정격 vs 계산', en: 'Rated vs calculated' },
-        nodes: diverg.slice(0, 5),
+        nodes: diverg.slice(0, 4),
         meta: [
           { k: { ko: '상태', en: 'Status' }, v: 'DIVERGENT' },
           { k: { ko: '전체', en: 'Total' }, v: fmt(493) + (lang() === 'ko' ? '개' : '') },
@@ -392,15 +365,21 @@
     host.classList.add('is-typing');
     (function tick() {
       host.textContent = str.slice(0, ++i);
-      if (i < str.length) qaLater(tick, 20 + Math.random() * 26);
-      else { host.classList.remove('is-typing'); qaLater(done, 420); }
+      if (i < str.length) qaLater(tick, 34 + Math.random() * 34);
+      else { host.classList.remove('is-typing'); qaLater(done, 900); }
     }());
   }
 
-  /* 노드 하나를 슬롯으로 날린다.
-     캔버스 안의 노드 좌표에 조각을 만들어 두고, 슬롯의 화면 좌표까지의
-     차이만큼 transform 으로 옮긴다. 좌표는 둘 다 getBoundingClientRect
-     기준이라 스크롤 위치와 무관하다. */
+  /* 노드 하나를 슬롯으로 옮긴다.
+
+     세 단계로 나눈다 — 어디서 뽑아오는지가 보여야 하기 때문이다.
+       ① 노드 자리에 고리를 띄운다        (그래프의 어느 점인지)
+       ② 노드에서 슬롯까지 선을 긋는다     (어디로 가는지)
+       ③ 조각이 그 선을 따라 내려앉는다
+
+     노드는 <canvas> 안에 있어 CSS 로 움직일 수 없다. 그래서 노드의 화면
+     좌표(graph.js 의 screenPos)에 DOM 조각을 만들어 겹쳐 놓고 옮긴다.
+     좌표는 fly 층(.qa2-fly, 두 칸을 함께 덮는다) 기준으로 환산한다. */
   function qaFlyNode(nodeIdx, slotLi, label, color, done) {
     var fly = el('qaFly'), canvas = el('qaGraph');
     if (!fly || !canvas || !qaGraph || reduced) { done(); return; }
@@ -408,33 +387,68 @@
     if (!p) { done(); return; }
 
     var cb = canvas.getBoundingClientRect(), fb = fly.getBoundingClientRect();
-    var chip = document.createElement('span');
-    chip.className = 'qa2-chip';
-    chip.style.setProperty('--c', color);
-    chip.textContent = label;
-    /* fly 층은 캔버스와 같은 자리에 겹쳐 있다. 그래도 두 사각형의 차이를
-       빼 주어야 한다 — 테두리 한 줄만 어긋나도 조각이 노드에서 떨어져 뜬다. */
-    chip.style.left = (cb.left - fb.left + p.x) + 'px';
-    chip.style.top = (cb.top - fb.top + p.y) + 'px';
-    fly.appendChild(chip);
+    var x0 = cb.left - fb.left + p.x, y0 = cb.top - fb.top + p.y;
 
-    /* 목표 위치를 지금 바로 계산한다.
-       처음에는 requestAnimationFrame 안에서 쟀는데, 프레임이 굶는 상황
-       (백그라운드 탭 · 인쇄 · 헤드리스 캡처)에서는 콜백이 오지 않아 답변이
-       영구히 비어 있었다. getBoundingClientRect 를 부르면 그 자리에서
-       레이아웃이 계산되므로 방금 붙인 조각의 크기도 이미 정확하다. */
-    var a = chip.getBoundingClientRect();
+    /* ① 노드 자리에 고리 */
+    var mark = document.createElement('span');
+    mark.className = 'qa2-mark';
+    mark.style.left = x0 + 'px';
+    mark.style.top = y0 + 'px';
+    fly.appendChild(mark);
+    /* 클래스를 붙이기 전에 한 번 읽어 두어야 애니메이션이 처음부터 돈다 */
+    void mark.offsetWidth;
+    mark.classList.add('is-on');
+
+    /* 목표 — 슬롯의 점 */
     var dotEl = slotLi.querySelector('.qs-dot');
-    var b = (dotEl || slotLi).getBoundingClientRect();
-    var dx = (b.left + b.width / 2) - (a.left + a.width / 2);
-    var dy = (b.top + b.height / 2) - (a.top + a.height / 2);
-    chip.classList.add('is-fly');
-    chip.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(.62)';
+    var b2 = (dotEl || slotLi).getBoundingClientRect();
+    var x1 = b2.left - fb.left + b2.width / 2, y1 = b2.top - fb.top + b2.height / 2;
+
+    /* ② 노드 → 슬롯 선 */
+    var dx = x1 - x0, dy = y1 - y0;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    var wire = document.createElement('span');
+    wire.className = 'qa2-wire';
+    wire.style.left = x0 + 'px';
+    wire.style.top = y0 + 'px';
+    wire.style.width = len + 'px';
+    wire.style.transform = 'rotate(' + ang.toFixed(2) + 'deg) scaleX(0)';
+    fly.appendChild(wire);
+    void wire.offsetWidth;
+    wire.classList.add('is-on');
+    wire.style.transform = 'rotate(' + ang.toFixed(2) + 'deg) scaleX(1)';
+
+    /* ③ 선이 다 그어진 뒤에 조각을 보낸다 */
     qaLater(function () {
-      chip.classList.add('is-done');
-      done();
-      qaLater(function () { if (chip.parentNode) chip.parentNode.removeChild(chip); }, 260);
-    }, 620);
+      var chip = document.createElement('span');
+      chip.className = 'qa2-chip';
+      chip.style.setProperty('--c', color);
+      chip.textContent = label;
+      chip.style.left = x0 + 'px';
+      chip.style.top = y0 + 'px';
+      fly.appendChild(chip);
+
+      /* getBoundingClientRect 가 그 자리에서 레이아웃을 계산하므로 방금 붙인
+         조각의 크기도 이미 정확하다 — requestAnimationFrame 을 기다리면
+         프레임이 굶는 환경에서 답변이 영구히 비어 있게 된다. */
+      var a2 = chip.getBoundingClientRect();
+      var cx = a2.left - fb.left + a2.width / 2, cy = a2.top - fb.top + a2.height / 2;
+      chip.classList.add('is-fly');
+      chip.style.transform = 'translate(' + (x1 - cx) + 'px,' + (y1 - cy) + 'px) scale(.62)';
+
+      qaLater(function () {
+        chip.classList.add('is-done');
+        wire.classList.remove('is-on');
+        wire.classList.add('is-off');
+        done();
+        qaLater(function () {
+          [chip, wire, mark].forEach(function (n) {
+            if (n.parentNode) n.parentNode.removeChild(n);
+          });
+        }, 600);
+      }, 1150);
+    }, 560);
   }
 
   function qaRun() {
@@ -481,11 +495,11 @@
               li.querySelector('.qs-nm').textContent = nd.l;
               li.querySelector('.qs-ty').textContent = L ? m.ko : m.en;
             });
-          }, 260 * n);
+          }, 1250 * n);
         });
 
         /* 근거 · 출처 · 조건 — 노드가 다 내려앉은 뒤에 붙는다 */
-        var tAfter = 260 * q.nodes.length + (reduced ? 40 : 760);
+        var tAfter = 1250 * q.nodes.length + (reduced ? 40 : 1900);
         qaLater(function () {
           if (meta) {
             meta.innerHTML = q.meta.map(function (m) {
@@ -501,9 +515,9 @@
           qaLater(function () {
             qaIdx++;
             if (qaRunning) qaRun();
-          }, reduced ? 7000 : 5200);
+          }, reduced ? 8000 : 7000);
         }, tAfter);
-      }, reduced ? 60 : 620);
+      }, reduced ? 60 : 1100);
     });
   }
 
@@ -532,6 +546,9 @@
 
     var hero = el('heroGraph');
     if (hero) OG.create(hero, { mode: 'hero', threeD: true });
+
+    var ingCanvas = el('ingGraph');
+    if (ingCanvas) ingGraph = OG.create(ingCanvas, { threeD: false });
 
     var exCanvas = el('mapGraph');
     if (exCanvas) {
