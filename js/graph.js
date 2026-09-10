@@ -352,8 +352,11 @@
         hoverNodes.forEach(function (j2) {
           var n2 = N[j2], p2 = pt[j2], isMain = j2 === hover;
           var label = n2.l.length > 24 ? n2.l.slice(0, 23) + '…' : n2.l;
-          ctx.font = (isMain ? '600 12.5px' : '400 10.5px') +
-                     ' "IBM Plex Mono", "Pretendard Variable", ui-monospace, monospace';
+          /* 그래프 라벨도 본문과 같은 서체를 쓴다. 캔버스는 CSS 를 상속하지
+             않으므로 여기 문자열로 적어 줘야 한다 — 예전에 이 자리를 놓쳐서
+             그래프 글씨만 다른 서체로 찍혔다. */
+          ctx.font = (isMain ? '600 13px' : '400 11.5px') +
+                     ' "SF Pro Text", system-ui, -apple-system, sans-serif';
           var w = ctx.measureText(label).width;
           var out = Math.cos(ang0[j2] + rot) < 0 ? -1 : 1;
           var gap = (TYPES[n2.t] || TYPES.src).r + 7;
@@ -472,11 +475,33 @@
        IO 는 화면을 벗어났을 때 멈추고 다시 들어오면 재개하는 용도로만 쓴다. */
     start();
 
-    if (global.IntersectionObserver) {
-      new global.IntersectionObserver(function (en) {
-        en.forEach(function (x) { x.isIntersecting ? start() : stop(); });
-      }, { threshold: 0 }).observe(canvas);
+    /* ── 화면에 있을 때만 그린다 ──
+       예전에는 IntersectionObserver 로 판단했다. 그런데 IO 콜백은 '렌더 갱신
+       뒤'에 오므로, 오지 않는 상황에서는 캔버스가 영구히 멈춘 상태로 남는다.
+       실측: 세 파트 어디로 스크롤해도 running=false · draws=2 였다 — 그래프가
+       빈 화면으로 보이고, lastPt 가 갱신되지 않아 질의응답의 노드 비행까지
+       사라졌다. 한 원인이 두 증상을 만들었다.
+
+       그래서 스크롤·리사이즈에서 좌표로 직접 판단한다. 동기 계산이라
+       굶을 수가 없다. 위아래로 200px 여유를 둬서 경계에서 깜빡이지 않는다. */
+    function inView() {
+      var b = canvas.getBoundingClientRect();
+      var vh = global.innerHeight || 800;
+      if (b.bottom > -200 && b.top < vh + 200) start(); else stop();
     }
+    var vq = false;
+    function onScrollView() {
+      if (vq) return;
+      vq = true;
+      global.requestAnimationFrame(function () { vq = false; inView(); });
+    }
+    global.addEventListener('scroll', onScrollView, { passive: true });
+    global.addEventListener('resize', inView);
+    /* 문서가 숨으면(다른 탭) 멈추고, 돌아오면 다시 본다 */
+    global.document.addEventListener('visibilitychange', function () {
+      if (global.document.hidden) stop(); else inView();
+    });
+    inView();
 
     return {
       start: start, stop: stop, resize: resize, info: info,

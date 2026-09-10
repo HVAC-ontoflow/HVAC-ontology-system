@@ -39,6 +39,13 @@
 
   function el(id) { return document.getElementById(id); }
 
+  /* 술어의 접두사. graph-data.js 에는 이름만 실려 있는데, 화면에 hvo: 를
+     일괄로 붙이면 사실이 틀린다 — hasPart 와 hasLocation 은 Brick 것이다.
+     질문·정답 카탈로그도 "hvo:hasPart 로 물으면 0행"이라고 적어 두었다.
+     ontology.ttl 을 grep 해서 확인한 결과대로 적는다. */
+  var BRICK_P = { hasPart: 1, hasLocation: 1 };
+  function qname(p) { return (BRICK_P[p] ? 'brick:' : 'hvo:') + p; }
+
   /* 마침표 뒤에서 줄을 바꾼다. 한글 본문은 문장 단위로 끊는 편이 훨씬 잘 읽힌다.
      0.335 · p.252 · SCH-A03 은 마침표 뒤에 공백이 없어 걸리지 않는다.
      이미 escape 된 문자열에 넣으므로 반드시 esc() 다음에 부른다. */
@@ -92,40 +99,77 @@
   });
 
   /* ═══ 01 문서 → 온톨로지 ═══════════════════════════════════════════
-     문서가 세 레이어(TBox · RBox · ABox)를 지나고, 그 뒤에서 온톨로지가
-     자라난다. 자라는 것은 그림이 아니라 실제 부분 그래프다 — graph.js 의
-     setBuild(p) 가 진행률만큼만 그린다.
+     문서가 세 단계를 지나며 온톨로지가 된다. 각 단계에서 실제로 무엇이
+     세워지는지 보여야 "무슨 처리를 거치는지" 가 읽힌다 — 이름만 적어 두면
+     칸 세 개가 그냥 놓여 있는 것과 같다.
 
-     레이어를 켜는 순서와 노드가 나오는 순서를 한 타임라인에 묶었다.
-       0.00 ~ 0.10   TBox 켜짐  (클래스 목록을 세운다)
-       0.10 ~ 0.20   RBox 켜짐  (관계 속성을 세운다)
-       0.20 ~ 1.00   ABox 켜짐  · 노드와 엣지가 이 구간에서 쌓인다
+       TBOX  클래스 계층      Brick 어휘를 재사용하고 필요한 것만 자체 정의
+       RBOX  관계 속성        이 온톨로지가 쓰는 술어 여덟 개
+       ABOX  개체 · 값 · 출처   위 두 스키마에 맞춰 단언한다 (개수가 쌓인다)
 
-     한 번 다 자라면 그대로 둔다. 계속 지웠다 다시 만들면 온톨로지가 사라지는
-     것처럼 보인다. 화면을 벗어났다 돌아오면 처음부터 다시 자란다. */
+     여기 적히는 클래스 이름과 술어는 모두 ontology.ttl 에 실제로 있는 것이다
+     (grep 으로 확인했다). 단계 이름을 채우기 위해 지어낸 것이 없다.
+
+     한 번 다 자라면 그대로 둔다 — 계속 지웠다 만들면 온톨로지가 사라지는
+     것처럼 보인다. 다시 보려면 '다시 만들기' 를 누른다. */
   var ingGraph = null;
+  var ingBuiltN = 0, ingBuiltE = 0, ingDone = false;
 
-  /* 지금까지 그려진 개수. register 보다 먼저 선언해야 한다 — var 는 끌어올려지되
-     값은 대입 시점에 들어가므로, 아래에 두면 첫 렌더에서 undefined 가 찍힌다
-     (실제로 "노드 undefined · 엣지 undefined" 로 나왔다). */
-  var ingBuiltN = 0, ingBuiltE = 0;
+  /* TBox — 실제 클래스. 상위(Brick)와 하위(자체 정의)를 짝으로 둔다. */
+  var PIPE_T = [
+    ['brick:Air_Handling_Unit', 'hvo:UnderfloorAirHandlingUnit'],
+    ['brick:Supply_Fan', 'brick:Motor'],
+    ['hvo:QuantityValue', 'hvo:SourceReference'],
+    ['hvo:DesignBasis', 'hvo:CalculationStep']
+  ];
+  /* RBox — 이 부분 그래프가 실제로 쓰는 술어 여덟 개 */
+  var PIPE_R = ['brick:hasPart', 'brick:hasLocation', 'hvo:serves',
+                'hvo:hasQuantityValue', 'hvo:selectedBy', 'hvo:derivedFrom',
+                'hvo:basedOn', 'hvo:sourcedFrom'];
 
-  register(function ingCount() {
-    var out = el('ingCount');
-    if (!out || typeof GRAPH === 'undefined') return;
-    out.dataset.tpl = lang() === 'ko' ? '노드 %N · 엣지 %E' : '%N nodes · %E edges';
-    ingPaintCount(ingBuiltN, ingBuiltE);
-  });
   function ingPaintCount(n, e) {
-    var out = el('ingCount');
+    var out = el('oneCount');
     if (!out) return;
     var tpl = out.dataset.tpl || '노드 %N · 엣지 %E';
     out.innerHTML = tpl.replace('%N', '<b>' + fmt(n) + '</b>')
                        .replace('%E', '<b>' + fmt(e) + '</b>');
   }
 
-  /* 진행률에 해당하는 노드·엣지 수. 화면의 숫자가 실제로 그려진 개수와
-     같아야 한다 — 어림수를 적으면 그림과 글이 어긋난다. */
+  register(function ingChrome() {
+    var out = el('oneCount');
+    if (out) {
+      out.dataset.tpl = lang() === 'ko' ? '노드 %N · 엣지 %E' : '%N nodes · %E edges';
+      ingPaintCount(ingBuiltN, ingBuiltE);
+    }
+    /* 단계 안의 항목은 진행률에 따라 열리므로, 뼈대만 미리 깔아 둔다. */
+    var tl = el('stTList');
+    if (tl) {
+      tl.innerHTML = PIPE_T.map(function (pair) {
+        return '<li><span class="pi-a">' + esc(pair[0]) + '</span>' +
+               '<span class="pi-b">' + esc(pair[1]) + '</span></li>';
+      }).join('');
+    }
+    var rl = el('stRList');
+    if (rl) {
+      rl.innerHTML = PIPE_R.map(function (p) {
+        return '<li><span class="pi-p">' + esc(p) + '</span></li>';
+      }).join('');
+    }
+    ingPaintStageA();
+  });
+
+  /* ABox 단계 — 쌓이는 개수를 그대로 적는다 */
+  function ingPaintStageA() {
+    var al = el('stAList');
+    if (!al || typeof GRAPH === 'undefined') return;
+    var L = lang() === 'ko';
+    al.innerHTML =
+      '<li><span class="pi-k">' + (L ? '개체' : 'individuals') + '</span>' +
+        '<span class="pi-v num">' + fmt(ingBuiltN) + '</span></li>' +
+      '<li><span class="pi-k">' + (L ? '관계 단언' : 'relations') + '</span>' +
+        '<span class="pi-v num">' + fmt(ingBuiltE) + '</span></li>';
+  }
+
   function ingCountAt(p) {
     if (typeof GRAPH === 'undefined' || !ingGraph) return [0, 0];
     var N = GRAPH.nodes.length;
@@ -139,56 +183,117 @@
     return [cut, e];
   }
 
-  register(function ingest() {
+  /* 01 의 생성 타이머. 상태 기계가 켜고 끈다. */
+  var ingTimer = null, ingT0 = 0, ingDur = 11000;
+
+  function ingStages() { return [el('stT'), el('stR'), el('stA')]; }
+
+  function ingOpen(host, frac) {
+    var lis = host ? host.children : [];
+    var k = Math.round(frac * lis.length);
+    for (var i = 0; i < lis.length; i++) lis[i].classList.toggle('is-on', i < k);
+  }
+
+  function ingStep() {
+    var p = Math.min(1, (Date.now() - ingT0) / ingDur);
+    var sts = ingStages();
+    if (sts[0]) sts[0].classList.toggle('is-on', p > 0.01);
+    if (sts[1]) sts[1].classList.toggle('is-on', p > 0.10);
+    if (sts[2]) sts[2].classList.toggle('is-on', p > 0.20);
+    if (sts[0]) sts[0].classList.toggle('is-past', p > 0.20);
+    if (sts[1]) sts[1].classList.toggle('is-past', p > 0.20);
+
+    ingOpen(el('stTList'), p <= 0.01 ? 0 : Math.min(1, (p - 0.01) / 0.09));
+    ingOpen(el('stRList'), p <= 0.10 ? 0 : Math.min(1, (p - 0.10) / 0.10));
+
+    var g = p <= 0.20 ? 0 : (p - 0.20) / 0.80;
+    if (G) G.setBuild(g);
+    var c = ingCountAt(g);
+    if (c[0] !== ingBuiltN || c[1] !== ingBuiltE) {
+      ingBuiltN = c[0]; ingBuiltE = c[1];
+      ingPaintCount(ingBuiltN, ingBuiltE);
+      ingPaintStageA();
+    }
+    if (p < 1) { ingTimer = setTimeout(ingStep, reduced ? 400 : 90); }
+    else { ingTimer = null; ingDone = true; ingMark(); }
+  }
+
+  function ingMark() {
+    var btn = el('ingReplay');
+    if (btn) btn.classList.toggle('is-ready', ingDone);
+  }
+  function ingPause() {
+    if (ingTimer !== null) { clearTimeout(ingTimer); ingTimer = null; }
+  }
+  function ingPlay() {
     var stage = el('ingStage');
-    if (!stage || stage.dataset.wired) return;
-    stage.dataset.wired = '1';
-
-    var gates = [el('gateT'), el('gateR'), el('gateA')];
-    var timer = null, t0 = 0;
-    var DUR = 11000;   /* 다 자라는 데 걸리는 시간. 시트 흐름(4.4초)과 맞춘다 */
-
-    function step() {
-      var p = Math.min(1, (Date.now() - t0) / DUR);
-      /* 레이어 — 진행률에 따라 차례로 켜진다 */
-      if (gates[0]) gates[0].classList.toggle('is-on', p > 0.02);
-      if (gates[1]) gates[1].classList.toggle('is-on', p > 0.10);
-      if (gates[2]) gates[2].classList.toggle('is-on', p > 0.20);
-
-      /* 노드는 ABox 가 켜진 뒤부터 쌓인다 */
-      var g = p <= 0.20 ? 0 : (p - 0.20) / 0.80;
-      if (ingGraph) ingGraph.setBuild(g);
-      var c = ingCountAt(g);
-      if (c[0] !== ingBuiltN || c[1] !== ingBuiltE) {
-        ingBuiltN = c[0]; ingBuiltE = c[1];
-        ingPaintCount(ingBuiltN, ingBuiltE);
+    if (stage) stage.classList.add('is-on');
+    if (ingTimer !== null || ingDone) return;
+    ingT0 = Date.now();
+    ingStep();
+  }
+  /* 02·03 으로 넘어가면 그래프는 완성된 상태여야 한다 — 절반만 자란 그래프
+     위에서 탐색하거나 답을 찾으면, 없는 노드를 가리키게 된다. */
+  function ingFinish() {
+    ingPause();
+    ingDone = true;
+    /* 남은 만큼을 한 번에 채우지 않고 0.6초에 걸쳐 메운다.
+       setBuild(1) 로 즉시 채우면 파트가 넘어가는 순간 노드 100여 개가
+       한꺼번에 튀어나와 '넘어갔다'가 아니라 '깜빡였다'로 보인다. */
+    if (G) {
+      var from = ingBuiltN / (GRAPH ? GRAPH.nodes.length : 1);
+      if (from < 0.999) {
+        var t1 = Date.now();
+        (function fill() {
+          var q = Math.min(1, (Date.now() - t1) / 600);
+          var v = from + (1 - from) * (1 - Math.pow(1 - q, 3));
+          G.setBuild(v);
+          var cc = ingCountAt(v);
+          ingBuiltN = cc[0]; ingBuiltE = cc[1];
+          ingPaintCount(ingBuiltN, ingBuiltE);
+          ingPaintStageA();
+          if (q < 1) setTimeout(fill, 40);
+        }());
+      } else {
+        G.setBuild(1);
       }
-      if (p < 1) timer = setTimeout(step, reduced ? 400 : 90);
-      else timer = null;
     }
+    var c = ingCountAt(1);
+    ingBuiltN = c[0]; ingBuiltE = c[1];
+    ingPaintCount(ingBuiltN, ingBuiltE);
+    ingPaintStageA();
+    var sts = ingStages();
+    sts.forEach(function (x) { if (x) { x.classList.add('is-on'); } });
+    if (sts[0]) sts[0].classList.add('is-past');
+    if (sts[1]) sts[1].classList.add('is-past');
+    ingOpen(el('stTList'), 1);
+    ingOpen(el('stRList'), 1);
+    ingMark();
+  }
+  function ingReplay() {
+    ingPause();
+    ingDone = false;
+    ingBuiltN = 0; ingBuiltE = 0;
+    if (G) { G.clearFocus(); G.setBuild(0); }
+    ingPaintCount(0, 0);
+    ingPaintStageA();
+    [el('stTList'), el('stRList')].forEach(function (h) {
+      if (!h) return;
+      for (var i = 0; i < h.children.length; i++) h.children[i].classList.remove('is-on');
+    });
+    ingStages().forEach(function (x) {
+      if (x) { x.classList.remove('is-on'); x.classList.remove('is-past'); }
+    });
+    ingMark();
+    ingT0 = Date.now();
+    ingStep();
+  }
 
-    function play() {
-      if (timer !== null) return;
-      /* 이미 다 자랐으면 다시 자라게 하지 않는다 */
-      if (ingBuiltN >= (GRAPH ? GRAPH.nodes.length : 0)) return;
-      t0 = Date.now();
-      step();
-    }
-    function pause() {
-      if (timer !== null) { clearTimeout(timer); timer = null; }
-    }
-
-    if (window.IntersectionObserver) {
-      new IntersectionObserver(function (ens) {
-        ens.forEach(function (e) {
-          stage.classList.toggle('is-on', e.isIntersecting);
-          if (e.isIntersecting) play(); else pause();
-        });
-      }, { threshold: 0.15 }).observe(stage);
-    } else {
-      stage.classList.add('is-on');
-      play();
-    }
+  register(function ingWire() {
+    var btn = el('ingReplay');
+    if (!btn || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', ingReplay);
   });
 
 
@@ -223,7 +328,7 @@
       return '<div class="ex-grp">' +
                '<div class="ex-grp-h">' +
                  '<span class="ex-arrow">' + (g.out ? '→' : '←') + '</span>' +
-                 '<span class="ex-pred">hvo:' + esc(g.p) + '</span>' +
+                 '<span class="ex-pred">' + esc(qname(g.p)) + '</span>' +
                  '<span class="ex-cnt num">' + g.items.length + '</span>' +
                '</div>' +
                '<ul class="ex-items">' + items + '</ul>' +
@@ -259,12 +364,6 @@
       }).join('');
     }
 
-    var cnt = el('exCount');
-    if (cnt && typeof GRAPH !== 'undefined') {
-      cnt.innerHTML = lang() === 'ko'
-        ? '노드 <b class="num">' + fmt(GRAPH.nodes.length) + '</b> · 엣지 <b class="num">' + fmt(GRAPH.edges.length) + '</b>'
-        : '<b class="num">' + fmt(GRAPH.nodes.length) + '</b> nodes · <b class="num">' + fmt(GRAPH.edges.length) + '</b> edges';
-    }
   });
 
   /* 2D / 3D 전환 */
@@ -617,7 +716,20 @@
   });
 
 
-  /* ═══ 그래프 만들기 ════════════════════════════════════════════════ */
+  /* ═══ 그래프 ═══════════════════════════════════════════════════════
+     캔버스는 둘뿐이다 — 히어로 배경과, 세 파트가 나눠 쓰는 고정 그래프.
+
+     파트마다 캔버스를 따로 두었더니 같은 그래프가 세 번 나와 "하나의 지식
+     베이스를 여러 각도에서 본다"가 아니라 "그림이 세 개 있다"로 읽혔다.
+     하나로 고정하고 스크롤 위치가 상태만 바꾼다.
+
+       01  생성 진행 (setBuild)   · 커서 판독 끔
+       02  전체 + 커서 판독
+       03  답 노드에 초점 · 조각이 답변판으로 내려앉음
+     ═══════════════════════════════════════════════════════════════ */
+  var G = null;                 /* 고정 그래프 하나 */
+  var STATE = '';               /* 'build' | 'explore' | 'qa' */
+
   (function graphs() {
     var OG = window.OntoGraph;
     if (!OG || typeof GRAPH === 'undefined') return;
@@ -625,49 +737,88 @@
     var hero = el('heroGraph');
     if (hero) OG.create(hero, { mode: 'hero', threeD: true });
 
-    var ingCanvas = el('ingGraph');
-    /* 3D 구면 배치로 세운다. 생성 모드(build)라 처음에는 아무것도 없고,
-       진행률에 따라 가운데에서 바깥으로 자란다. */
-    if (ingCanvas) ingGraph = OG.create(ingCanvas, { threeD: true, build: true });
+    var one = el('oneGraph');
+    if (!one) return;
+    G = OG.create(one, {
+      threeD: /(^|[?&])3d(&|=|$)/.test(searchStr()) || true,
+      build: true,
+      /* 질의응답에서 답만 밝힐 때 배경 그래프가 남아 있게 한다 */
+      dimFloor: { edge: 0.16, node: 0.44 },
+      onHover: function (nd) {
+        var host = el('exRead');
+        if (!host) return;
+        /* 판독은 02 구간에서만 쓴다. 다른 구간에서 커서가 지나가도
+           02 의 칸을 바꿔 놓으면 읽는 사람이 어리둥절해진다. */
+        if (STATE !== 'explore') return;
+        host.innerHTML = nd ? exReadNode(nd) : exReadEmpty();
+      }
+    });
+    ingGraph = G;
+    qaGraph = G;
+    exGraph = G;
+    dimToggleRedraw();
+    QA = qaResolve();
+  }());
 
-    var exCanvas = el('mapGraph');
-    if (exCanvas) {
-      exGraph = OG.create(exCanvas, {
-        threeD: /(^|[?&])3d(&|=|$)/.test(searchStr()),
-        onHover: function (nd) {
-          var host = el('exRead');
-          if (!host) return;
-          host.innerHTML = nd ? exReadNode(nd) : exReadEmpty();
-        }
-      });
-      dimToggleRedraw();
-    }
+  /* ── 스크롤 → 상태 ──
+     세 파트 중 화면 가운데에 가장 가까운 것을 고른다. 경계에서 왔다 갔다
+     하지 않도록 '가운데를 지난 마지막 파트' 로 정한다. */
+  (function stageState() {
+    if (!G) return;
+    var parts = ['build', 'explore', 'qa'].map(el).filter(Boolean);
+    if (!parts.length) return;
 
-    var qaCanvas = el('qaGraph');
-    if (qaCanvas) {
-      /* 질의응답 쪽 그래프는 읽는 대상이 아니라 연출 무대다. 커서 판독을
-         켜지 않고, 3D 로 두어 노드가 공간에 흩어져 있는 것이 보이게 한다. */
-      /* dimFloor 를 올려 준다. 답이 되는 노드만 밝히면 나머지가 거의 사라져
-         "그래프에서 찾았다"가 아니라 "빈 화면에 몇 개 떠 있다"로 보였다 —
-         두 번째 문항부터 그래프가 안 보인다는 말이 이것이었다. */
-      qaGraph = OG.create(qaCanvas, {
-        threeD: true,
-        dimFloor: { edge: 0.16, node: 0.44 }
-      });
-      QA = qaResolve();
+    var LABEL = {
+      build:   { ko: '온톨로지 생성 중',   en: 'building the ontology' },
+      explore: { ko: '탐색 · 커서를 올려 보세요', en: 'explore · hover a node' },
+      qa:      { ko: '질의응답',           en: 'question & answer' }
+    };
 
-      if (window.IntersectionObserver) {
-        /* 화면에 들어와야 시작한다. 위에서부터 읽는 사람이 이 파트에
-           도달했을 때 첫 문항이 시작되어야 한다. */
-        new IntersectionObserver(function (ens) {
-          ens.forEach(function (e) {
-            if (e.isIntersecting) qaStart(); else qaStop();
-          });
-        }, { threshold: 0.25 }).observe(el('qa'));
+    function apply(next) {
+      if (next === STATE) return;
+      STATE = next;
+
+      var st = el('sgState');
+      if (st) st.textContent = t(LABEL[next] || '');
+
+      var bar = el('ingReplay');
+      if (bar) bar.hidden = (next !== 'build');
+      var dim = el('mapDim');
+      if (dim) dim.hidden = (next === 'build');
+
+      if (next === 'build') {
+        qaStop();
+        G.clearFocus();
+        ingPlay();
+      } else if (next === 'explore') {
+        qaStop();
+        ingFinish();          /* 02 로 넘어오면 그래프는 완성된 상태여야 한다 */
+        G.clearFocus();
+        var host = el('exRead');
+        if (host) host.innerHTML = exReadEmpty();
       } else {
+        ingFinish();
         qaStart();
       }
     }
+
+    function frame() {
+      var mid = (window.innerHeight || 800) * 0.42;
+      var pick = parts[0].id;
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].getBoundingClientRect().top <= mid) pick = parts[i].id;
+      }
+      apply(pick);
+    }
+
+    var q = false;
+    window.addEventListener('scroll', function () {
+      if (q) return;
+      q = true;
+      window.requestAnimationFrame(function () { q = false; frame(); });
+    }, { passive: true });
+    window.addEventListener('resize', frame);
+    frame();
   }());
 
   function searchStr() {
