@@ -55,6 +55,11 @@
   };
 
   /* 범례 순서 — 가운데 고리부터 바깥 고리 순. 그림의 반지름 순서와 같다. */
+  /* 술어의 접두사. graph-data.js 에는 이름만 실려 있는데 화면에 hvo: 를
+     일괄로 붙이면 사실이 틀린다 — hasPart 와 hasLocation 은 Brick 것이다.
+     ontology.ttl 로 확인한 결과다. */
+  var BRICK_P = { hasPart: 1, hasLocation: 1 };
+
   var LEGEND = ['eq', 'basis', 'calc', 'cond', 'part', 'zone', 'vOK', 'vNO', 'vTOL', 'src'];
 
   var reduced = global.matchMedia &&
@@ -157,7 +162,14 @@
 
       /* 원은 찌그러뜨리지 않는다 — 가로세로 같은 배율만 쓴다.
          지도는 전부 담고, 히어로는 조금 넘치게 두어 위아래가 잘린다. */
-      var fit = Math.min(box.width, box.height) / (R0 * 2);
+      /* 배율을 2px 단위로 끊는다.
+         스크롤 중에 박스 높이가 1px 단위로 흔들리는 일이 있고(스크롤바 ·
+         sticky 전환 · 100vh 변동), 그때마다 fit 이 달라져 그래프가 미세하게
+         커졌다 작아졌다 했다 — "스크롤하면서 화면 비율이 달라진다" 가 이것이다.
+         눈에 보이지 않을 만큼만 양자화하면 흔들림이 사라진다. */
+      var qw = Math.round(box.width / 2) * 2;
+      var qh = Math.round(box.height / 2) * 2;
+      var fit = Math.min(qw, qh) / (R0 * 2);
       if (isHero) {
         /* 확대하면(1.4배로 해 봤다) 화면에 남는 것이 방사선 줄무늬뿐이어서
            구조가 읽히지 않는다. 바퀴 전체가 들어오는 배율로 두고 오른쪽으로
@@ -220,7 +232,19 @@
                k: 1 + (k - 1) * m, z: 0.62 + (zn - 0.62) * m };
     }
 
+    /* 한 프레임에서 예외가 나도 연쇄를 끊지 않는다.
+       예전에는 draw() 마지막 줄에서만 다음 프레임을 요청했기 때문에, 중간에
+       한 번 던지면 그래프가 그 자리에서 영구히 멈췄다. 그림 하나 깨지는 것과
+       화면이 죽는 것은 무게가 다르다. */
     function draw() {
+      try { drawFrame(); }
+      catch (err) {
+        if (global.console && console.warn) console.warn('graph draw:', err);
+      }
+      raf = running ? global.requestAnimationFrame(draw) : null;
+    }
+
+    function drawFrame() {
       /* 시간은 rAF 타임스탬프가 아니라 벽시계로 잰다.
          rAF 로 재면 브라우저가 프레임을 아껴 주는 상황(백그라운드 탭 ·
          인쇄 · 스크린샷 캡처)에서 등장 애니메이션이 중간에 멈춘 채로 남는다.
@@ -282,7 +306,7 @@
         /* 한쪽 끝이 아직 없으면 선을 그을 데가 없다 */
         if (bRank[E[e2][0]] >= bCut || bRank[E[e2][1]] >= bCut) continue;
         var a = pt[E[e2][0]], b = pt[E[e2][1]];
-        var lit = !isHero && dim && hoverEdges.has(e2);
+        var lit = !isHero && dim && hoverEdges !== null && hoverEdges.has(e2);
         /* 눌린 쪽의 바닥값을 .05 → .09 로 올렸다. 질의응답에서 답이 되는
            노드만 밝히면 나머지가 거의 사라져 '그래프 위에서 찾았다'가 아니라
            '빈 화면에 몇 개 떠 있다'로 보였다. */
@@ -316,7 +340,7 @@
         if (bRank[j] >= bCut) continue;          /* 아직 만들어지지 않았다 */
         var n = N[j], ty = TYPES[n.t] || TYPES.src, p = pt[j];
         var rr = (ty.r + Math.min(2.6, Math.sqrt(n.d) * 0.6)) * (isHero ? 0.9 : 1);
-        var litN = !isHero && dim && hoverNodes.has(j);
+        var litN = !isHero && dim && hoverNodes !== null && hoverNodes.has(j);
         var al2 = (isHero ? 0.88 : (dim ? (litN ? 1 : DIMF.node) : 0.92)) * prog;
         if (morph > 0.001) {
           rr *= 1 + morph * (p.k - 1);                       /* 원근 크기 */
@@ -345,32 +369,149 @@
         ctx.globalAlpha = 1;
       }
 
-      /* ── 이름 ──
-         hover 한 것과 그 이웃만. 라벨은 바퀴 바깥쪽으로 눕혀 겹침을 줄인다. */
-      if (!isHero && dim && hoverNodes) {
-        ctx.textBaseline = 'middle';
-        hoverNodes.forEach(function (j2) {
-          var n2 = N[j2], p2 = pt[j2], isMain = j2 === hover;
-          var label = n2.l.length > 24 ? n2.l.slice(0, 23) + '…' : n2.l;
-          /* 그래프 라벨도 본문과 같은 서체를 쓴다. 캔버스는 CSS 를 상속하지
-             않으므로 여기 문자열로 적어 줘야 한다 — 예전에 이 자리를 놓쳐서
-             그래프 글씨만 다른 서체로 찍혔다. */
-          ctx.font = (isMain ? '600 13px' : '400 11.5px') +
-                     ' "SF Pro Text", system-ui, -apple-system, sans-serif';
-          var w = ctx.measureText(label).width;
-          var out = Math.cos(ang0[j2] + rot) < 0 ? -1 : 1;
-          var gap = (TYPES[n2.t] || TYPES.src).r + 7;
-          var bx = out > 0 ? p2.x + gap : p2.x - gap - w;
+      /* ── 강조 ──
+         예전에는 이웃 노드의 이름만 띄웠다. 그러면 "무엇이 매달려 있다"까지만
+         알고 "어떻게 매달려 있다"는 알 수 없다 — 관계는 노드가 아니라 술어다.
+         게다가 이름 열 개가 한자리에 겹쳐 쌓여 읽히지도 않았다.
+
+         지금은 셋을 그린다.
+           ① 중심 노드에 링 두 겹      — 어디를 짚었는지
+           ② 엣지에 방향 화살표         — 어느 쪽으로 향하는 관계인지
+           ③ 술어 이름을 묶어서 한 번씩  — 어떤 관계인지
+         이름표는 놓을 자리를 확인하고, 겹치면 아래로 밀어 놓는다. */
+      if (!isHero && hoverNodes) {
+        var FONT = ' "SF Pro Text", system-ui, -apple-system, sans-serif';
+        var placed = [];
+
+        function free(x, y, w, h) {
+          for (var i = 0; i < placed.length; i++) {
+            var r = placed[i];
+            if (x < r.x + r.w + 3 && x + w + 3 > r.x &&
+                y < r.y + r.h + 2 && y + h + 2 > r.y) return false;
+          }
+          return true;
+        }
+        /* 제자리에 못 놓으면 위아래로 조금씩 밀어 본다. 그래도 안 되면 버린다 —
+           읽을 수 없게 겹쳐 놓는 것보다 하나 빼는 편이 낫다. */
+        function place(x, y, w, h) {
+          for (var k = 0; k < 9; k++) {
+            var dy = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * (h + 3);
+            if (free(x, y + dy, w, h)) {
+              placed.push({ x: x, y: y + dy, w: w, h: h });
+              return y + dy;
+            }
+          }
+          return null;
+        }
+        function chip(x, y, text, fg, bg, bd, weight, size) {
+          ctx.font = weight + ' ' + size + 'px' + FONT;
+          var w = ctx.measureText(text).width, h = size + 9;
+          var yy = place(x, y - h / 2, w + 14, h);
+          if (yy === null) return false;
+          ctx.fillStyle = bg;
+          ctx.beginPath();
+          ctx.rect(x, yy, w + 14, h);
+          ctx.fill();
+          if (bd) {
+            ctx.strokeStyle = bd; ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          ctx.fillStyle = fg;
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, x + 7, yy + h / 2);
+          return true;
+        }
+
+        /* ① 중심 노드에 링 — hover 는 하나, 초점(질의응답)은 여럿 */
+        var cores = hover >= 0 ? [hover] : [];
+        if (hover < 0 && focusSet) focusSet.forEach(function (v) { cores.push(v); });
+        ctx.lineWidth = 1.4;
+        for (var ci = 0; ci < cores.length; ci++) {
+          var cp = pt[cores[ci]];
+          if (!cp) continue;
+          ctx.strokeStyle = 'rgba(106,180,255,.85)';
+          ctx.beginPath(); ctx.arc(cp.x, cp.y, 11, 0, 6.2832); ctx.stroke();
+          ctx.strokeStyle = 'rgba(106,180,255,.30)';
+          ctx.beginPath(); ctx.arc(cp.x, cp.y, 17, 0, 6.2832); ctx.stroke();
+        }
+
+        /* ② 방향 화살표 — hover 한 노드에 붙은 엣지에만 */
+        if (hover >= 0) {
+          var hp = pt[hover];
+          ctx.fillStyle = 'rgba(166,212,255,.9)';
+          nbr[hover].forEach(function (ei) {
+            var from = pt[E[ei][0]], to = pt[E[ei][1]];
+            if (!from || !to) return;
+            var vx = to.x - from.x, vy = to.y - from.y;
+            var len = Math.sqrt(vx * vx + vy * vy);
+            if (len < 24) return;
+            vx /= len; vy /= len;
+            /* 목표 노드 앞에서 멈춘다 — 노드 위에 겹치면 무엇을 가리키는지 흐려진다 */
+            var ax = to.x - vx * 9, ay = to.y - vy * 9;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - vx * 8 - vy * 4, ay - vy * 8 + vx * 4);
+            ctx.lineTo(ax - vx * 8 + vy * 4, ay - vy * 8 - vx * 4);
+            ctx.closePath();
+            ctx.fill();
+          });
+        }
+
+        /* ③ 술어 — 같은 술어·같은 방향은 한 번만. 그 무리의 가운데에 적는다.
+           엣지마다 적으면 같은 이름이 여덟 번 쌓여 읽을 수 없다. */
+        if (hover >= 0) {
+          var groups = {};
+          nbr[hover].forEach(function (ei) {
+            var out = E[ei][0] === hover;
+            var key = (out ? '>' : '<') + E[ei][2];
+            var mid = { x: (pt[E[ei][0]].x + pt[E[ei][1]].x) / 2,
+                        y: (pt[E[ei][0]].y + pt[E[ei][1]].y) / 2 };
+            if (!groups[key]) groups[key] = { p: E[ei][2], out: out, x: 0, y: 0, n: 0 };
+            groups[key].x += mid.x; groups[key].y += mid.y; groups[key].n++;
+          });
+          Object.keys(groups).forEach(function (k) {
+            var g = groups[k];
+            var name = (BRICK_P[g.p] ? 'brick:' : 'hvo:') + g.p +
+                       (g.n > 1 ? '  ×' + g.n : '');
+            chip(g.x / g.n + 8, g.y / g.n, (g.out ? '→ ' : '← ') + name,
+                 '#a6d4ff', 'rgba(7,13,24,.94)', 'rgba(106,180,255,.55)', '500', 11.5);
+          });
+        }
+
+        /* 이름표 — 중심에서 가까운 것부터 놓는다. 자리가 없으면 버린다. */
+        var list = [];
+        hoverNodes.forEach(function (j2) { list.push(j2); });
+        var anchor = hover >= 0 ? pt[hover] : null;
+        if (anchor) {
+          list.sort(function (u, v) {
+            function d(i) {
+              var q = pt[i];
+              return (q.x - anchor.x) * (q.x - anchor.x) + (q.y - anchor.y) * (q.y - anchor.y);
+            }
+            return d(u) - d(v);
+          });
+        }
+        for (var li = 0; li < list.length; li++) {
+          var j2 = list[li], n2 = N[j2], p2 = pt[j2];
+          if (!p2) continue;
+          var isMain = j2 === hover;
+          var label = n2.l.length > 22 ? n2.l.slice(0, 21) + '…' : n2.l;
+          var size = isMain ? 13.5 : 11.5;
+          ctx.font = (isMain ? '600 ' : '400 ') + size + 'px' + FONT;
+          var w = ctx.measureText(label).width + 14;
+          var out2 = Math.cos(ang0[j2] + rot) < 0 ? -1 : 1;
+          var gap = (TYPES[n2.t] || TYPES.src).r + (isMain ? 20 : 8);
+          var bx = out2 > 0 ? p2.x + gap : p2.x - gap - w;
           bx = Math.max(3, Math.min(bx, view.w - w - 4));
-          ctx.fillStyle = 'rgba(7,13,24,.92)';
-          ctx.fillRect(bx - 3, p2.y - 8, w + 7, 16);
-          ctx.fillStyle = isMain ? '#e8f0fc' : '#93accb';
-          ctx.fillText(label, bx, p2.y);
-        });
+          chip(bx, p2.y, label,
+               isMain ? '#f4f7fa' : '#c3ccd6',
+               isMain ? 'rgba(11,20,36,.97)' : 'rgba(7,13,24,.90)',
+               isMain ? 'rgba(106,180,255,.8)' : null,
+               isMain ? '600' : '400', size);
+        }
       }
 
       lastPt = pt;
-      raf = running ? global.requestAnimationFrame(draw) : null;
     }
 
     function kick() { if (raf === null && running) raf = global.requestAnimationFrame(draw); }
@@ -402,11 +543,22 @@
       return best;
     }
 
+    /* 초점(focus)으로 만든 집합. setHover 가 커서 집합으로 덮어쓰더라도
+       커서가 떠날 때 이걸로 되돌린다. */
+    var focusSet = null, focusEdges = null;
+
     function setHover(i) {
       if (i === hover) return;
       hover = i;
-      if (i < 0) { hoverEdges = hoverNodes = null; }
-      else {
+      if (i < 0) {
+        /* 여기서 그냥 null 로 비우면, 초점이 켜져 있는 동안(dim === true)
+           draw() 가 hoverNodes.has() 를 부르다 예외로 죽는다. 그러면 rAF
+           연쇄가 끊겨 그래프가 영구히 멈추고, 창을 다시 열 때까지 돌아오지
+           않는다 — 커서를 캔버스 밖으로 빼거나 2D/3D 를 누르는 것만으로
+           재현됐다. 초점이 있으면 그 집합으로 되돌린다. */
+        if (focused) { hoverEdges = focusEdges; hoverNodes = focusSet; }
+        else { hoverEdges = hoverNodes = null; }
+      } else {
         hoverEdges = new Set(nbr[i]);
         hoverNodes = new Set([i]);
         nbr[i].forEach(function (ei) {
@@ -528,20 +680,23 @@
 
       focus: function (list) {
         if (!list || !list.length) {
-          focused = false; hoverEdges = hoverNodes = null; kick(); return;
+          focused = false; focusSet = focusEdges = null;
+          hoverEdges = hoverNodes = null; kick(); return;
         }
         var set = new Set(list);
-        focused = true;
-        hoverNodes = set;
-        hoverEdges = new Set();
+        var eset = new Set();
         for (var k = 0; k < E.length; k++) {
-          if (set.has(E[k][0]) && set.has(E[k][1])) hoverEdges.add(k);
+          if (set.has(E[k][0]) && set.has(E[k][1])) eset.add(k);
         }
+        focused = true;
+        focusSet = set; focusEdges = eset;
+        hoverNodes = set; hoverEdges = eset;
         hover = -1;
         kick();
       },
       clearFocus: function () {
-        focused = false; hoverEdges = hoverNodes = null; hover = -1; kick();
+        focused = false; focusSet = focusEdges = null;
+        hoverEdges = hoverNodes = null; hover = -1; kick();
       },
       screenPos: function (i) {
         if (!lastPt || !lastPt[i]) return null;

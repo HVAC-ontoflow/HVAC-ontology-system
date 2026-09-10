@@ -215,7 +215,7 @@
       ingPaintStageA();
     }
     if (p < 1) { ingTimer = setTimeout(ingStep, reduced ? 400 : 90); }
-    else { ingTimer = null; ingDone = true; ingMark(); }
+    else { ingTimer = null; ingDone = true; ingDoneNow(); }
   }
 
   function ingMark() {
@@ -232,47 +232,26 @@
     ingT0 = Date.now();
     ingStep();
   }
-  /* 02·03 으로 넘어가면 그래프는 완성된 상태여야 한다 — 절반만 자란 그래프
-     위에서 탐색하거나 답을 찾으면, 없는 노드를 가리키게 된다. */
-  function ingFinish() {
-    ingPause();
-    ingDone = true;
-    /* 남은 만큼을 한 번에 채우지 않고 0.6초에 걸쳐 메운다.
-       setBuild(1) 로 즉시 채우면 파트가 넘어가는 순간 노드 100여 개가
-       한꺼번에 튀어나와 '넘어갔다'가 아니라 '깜빡였다'로 보인다. */
-    if (G) {
-      var from = ingBuiltN / (GRAPH ? GRAPH.nodes.length : 1);
-      if (from < 0.999) {
-        var t1 = Date.now();
-        (function fill() {
-          var q = Math.min(1, (Date.now() - t1) / 600);
-          var v = from + (1 - from) * (1 - Math.pow(1 - q, 3));
-          G.setBuild(v);
-          var cc = ingCountAt(v);
-          ingBuiltN = cc[0]; ingBuiltE = cc[1];
-          ingPaintCount(ingBuiltN, ingBuiltE);
-          ingPaintStageA();
-          if (q < 1) setTimeout(fill, 40);
-        }());
-      } else {
-        G.setBuild(1);
-      }
-    }
-    var c = ingCountAt(1);
-    ingBuiltN = c[0]; ingBuiltE = c[1];
-    ingPaintCount(ingBuiltN, ingBuiltE);
-    ingPaintStageA();
-    var sts = ingStages();
-    sts.forEach(function (x) { if (x) { x.classList.add('is-on'); } });
-    if (sts[0]) sts[0].classList.add('is-past');
-    if (sts[1]) sts[1].classList.add('is-past');
-    ingOpen(el('stTList'), 1);
-    ingOpen(el('stRList'), 1);
+  /* 온톨로지가 다 만들어졌는지. 이 값이 false 인 동안 02·03 의 기능은 잠긴다.
+
+     예전에는 02·03 으로 스크롤하면 ingFinish() 가 남은 노드를 앞당겨 채웠다.
+     그러면 "만들어지는 과정"이 스크롤 한 번에 건너뛰어지고, 결과가 짠 하고
+     나타난다 — 만드는 것을 보여주는 파트인데 그 과정을 스스로 지운 셈이었다.
+     지금은 생성이 제 속도로 끝까지 가고, 아래 파트는 그동안 기다린다. */
+  var ontologyReady = false;
+
+  function ingDoneNow() {
+    ontologyReady = true;
     ingMark();
+    /* 다 만들어진 시점의 파트에 맞춰 기능을 켠다 */
+    if (typeof stageEnable === 'function') stageEnable();
   }
+
   function ingReplay() {
     ingPause();
     ingDone = false;
+    ontologyReady = false;
+    if (typeof stageEnable === 'function') stageEnable();
     ingBuiltN = 0; ingBuiltE = 0;
     if (G) { G.clearFocus(); G.setBuild(0); }
     ingPaintCount(0, 0);
@@ -558,7 +537,7 @@
      좌표(graph.js 의 screenPos)에 DOM 조각을 만들어 겹쳐 놓고 옮긴다.
      좌표는 fly 층(.qa2-fly, 두 칸을 함께 덮는다) 기준으로 환산한다. */
   function qaFlyNode(nodeIdx, slotLi, label, color, done) {
-    var fly = el('qaFly'), canvas = el('qaGraph');
+    var fly = el('qaFly'), canvas = el('oneGraph');
     if (!fly || !canvas || !qaGraph || reduced) { done(); return; }
     var p = qaGraph.screenPos(nodeIdx);
     if (!p) { done(); return; }
@@ -700,6 +679,7 @@
 
   function qaStart() {
     if (qaRunning || !QA.length) return;
+    if (!ontologyReady) return;
     qaRunning = true;
     qaIdx = 0;
     qaRun();
@@ -749,7 +729,7 @@
         if (!host) return;
         /* 판독은 02 구간에서만 쓴다. 다른 구간에서 커서가 지나가도
            02 의 칸을 바꿔 놓으면 읽는 사람이 어리둥절해진다. */
-        if (STATE !== 'explore') return;
+        if (STATE !== 'explore' || !ontologyReady) return;
         host.innerHTML = nd ? exReadNode(nd) : exReadEmpty();
       }
     });
@@ -761,45 +741,82 @@
   }());
 
   /* ── 스크롤 → 상태 ──
-     세 파트 중 화면 가운데에 가장 가까운 것을 고른다. 경계에서 왔다 갔다
-     하지 않도록 '가운데를 지난 마지막 파트' 로 정한다. */
+     세 파트 중 화면 가운데를 지난 마지막 것을 고른다. 경계에서 왔다 갔다
+     하지 않도록 '지나간 마지막' 으로 정한다.
+
+     기능은 온톨로지가 다 만들어진 뒤에만 켠다. 절반만 자란 그래프 위에서
+     탐색하거나 답을 찾으면 아직 없는 노드를 가리키게 된다. */
+  var stageEnable = null;
+
   (function stageState() {
     if (!G) return;
     var parts = ['build', 'explore', 'qa'].map(el).filter(Boolean);
     if (!parts.length) return;
 
     var LABEL = {
-      build:   { ko: '온톨로지 생성 중',   en: 'building the ontology' },
-      explore: { ko: '탐색 · 커서를 올려 보세요', en: 'explore · hover a node' },
-      qa:      { ko: '질의응답',           en: 'question & answer' }
+      build:   { ko: '온톨로지 생성 중',            en: 'building the ontology' },
+      explore: { ko: '탐색 · 커서를 올려 보세요',   en: 'explore · hover a node' },
+      qa:      { ko: '질의응답',                    en: 'question & answer' }
+    };
+    var WAIT = { ko: '온톨로지 생성 중 · 잠시 후 사용할 수 있습니다',
+                 en: 'building the ontology · available shortly' };
+
+    function paintState() {
+      var st = el('sgState');
+      if (!st) return;
+      st.textContent = ontologyReady ? t(LABEL[STATE] || '') : t(WAIT);
+      st.classList.toggle('is-wait', !ontologyReady);
+    }
+
+    /* 잠금 표시 — 02 의 판독판과 03 의 답변판에 같은 문구를 둔다.
+       칸을 비워 두면 고장난 것처럼 보이므로 왜 기다리는지 적는다. */
+    function lockNote() {
+      var L = lang() === 'ko';
+      return '<div class="ex-empty">' +
+        '<span class="ex-kicker">' + (L ? '대기' : 'waiting') + '</span>' +
+        '<p class="ex-lead">' + (L
+          ? '온톨로지가 만들어지는 중입니다.<br>다 만들어지면 이 자리에서 노드를 읽을 수 있습니다.'
+          : 'The ontology is still being built.<br>Once it is complete you can read nodes here.') +
+        '</p></div>';
+    }
+
+    /* 지금 파트에 맞춰 기능을 켜고 끈다. 생성이 끝나는 순간에도 불린다. */
+    stageEnable = function () {
+      var flow = document.querySelector('.stage-flow');
+      if (flow) flow.classList.toggle('is-locked', !ontologyReady);
+      paintState();
+
+      var dim = el('mapDim');
+      if (dim) dim.hidden = (STATE === 'build') || !ontologyReady;
+      var btn = el('ingReplay');
+      if (btn) btn.hidden = (STATE !== 'build');
+
+      if (!ontologyReady) {
+        qaStop();
+        var host = el('exRead');
+        if (host && STATE !== 'build') host.innerHTML = lockNote();
+        return;
+      }
+
+      if (STATE === 'explore') {
+        qaStop();
+        G.clearFocus();
+        var h2 = el('exRead');
+        if (h2) h2.innerHTML = exReadEmpty();
+      } else if (STATE === 'qa') {
+        qaStart();
+      } else {
+        qaStop();
+        G.clearFocus();
+      }
     };
 
     function apply(next) {
       if (next === STATE) return;
       STATE = next;
-
-      var st = el('sgState');
-      if (st) st.textContent = t(LABEL[next] || '');
-
-      var bar = el('ingReplay');
-      if (bar) bar.hidden = (next !== 'build');
-      var dim = el('mapDim');
-      if (dim) dim.hidden = (next === 'build');
-
-      if (next === 'build') {
-        qaStop();
-        G.clearFocus();
-        ingPlay();
-      } else if (next === 'explore') {
-        qaStop();
-        ingFinish();          /* 02 로 넘어오면 그래프는 완성된 상태여야 한다 */
-        G.clearFocus();
-        var host = el('exRead');
-        if (host) host.innerHTML = exReadEmpty();
-      } else {
-        ingFinish();
-        qaStart();
-      }
+      /* 생성은 어느 파트에 있어도 계속 간다 — 무대가 화면에 있으면 시작한다. */
+      ingPlay();
+      stageEnable();
     }
 
     function frame() {
@@ -818,7 +835,9 @@
       window.requestAnimationFrame(function () { q = false; frame(); });
     }, { passive: true });
     window.addEventListener('resize', frame);
+    STATE = '';
     frame();
+    stageEnable();
   }());
 
   function searchStr() {

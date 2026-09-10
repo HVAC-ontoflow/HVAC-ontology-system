@@ -639,7 +639,7 @@ h2 {
   .vh-cq, .claim-doc, .op-note, .gc-t, .fu-l, .bh-t, .cap-go, .cap-n,
   .foot-back, .dist h3, .siblings h3, .q-jump, .excerpt > summary,
   .detail-dl dt, .bldg dt, .graph-cap .gc-t,
-  .qa2-who-t, .qa2-state, .qh-n, .map-dim .md-label, .badge-ko,
+  .qa2-who-t, .qa2-state, .qh-n, .sg-dim button em, .badge-ko,
   .ing-cap, .ex-kicker, .qa2-meta dt
 ) {
   letter-spacing: .02em; text-transform: none;
@@ -756,38 +756,30 @@ h2 {
 /* ── 2D / 3D 전환 ──
    지도 위에 얹지 않고 캔버스 바로 위 한 줄로 둔다. 캔버스 안에 띄우면
    회전하는 그림과 겹쳐 읽기 어렵고, 스크린샷에서도 자리가 흔들린다. */
-.map-dim {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 14px;
-  background: var(--panel-2); border-bottom: 1px solid var(--line);
-}
-/* 자리 이름 — 참고자료의 잘게 자간을 벌린 소문자 라벨과 같은 방식 */
-.map-dim .md-label {
-  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
-  text-transform: uppercase; color: var(--dimmer);
-  padding-right: 2px;
-}
-.map-dim button {
+/* ── 2D / 3D 토글 ──
+   컨테이너 클래스를 .map-dim → .sg-dim 으로 옮기면서 이 규칙들이 통째로
+   죽어 있었다. 그래서 <em> 이 브라우저 기본값대로 기울어 찍혔다 —
+   버튼 모양도 함께 사라졌다. 선택자를 실제 클래스에 맞춘다. */
+.sg-dim button {
   cursor: pointer; font: inherit;
-  display: inline-flex; align-items: baseline; gap: 7px;
-  font-family: var(--mono); font-size: 14.5px; letter-spacing: .08em;
-  padding: 8px 15px; border: 1px solid var(--line-2); border-radius: 2px;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+  padding: 5px 11px; border: 1px solid var(--line-2); border-radius: 2px;
   background: var(--surface); color: var(--dim);
+  white-space: nowrap;
 }
-.map-dim button em {
-  font-family: var(--kr); font-size: 13.5px; font-style: normal;
-  letter-spacing: 0; opacity: .78;
+.sg-dim button em {
+  /* 기울이지 않는다. <em> 을 쓴 것은 뜻의 층위 때문이고 모양 때문이 아니다. */
+  font-style: normal; font-family: var(--kr);
+  font-size: 11px; letter-spacing: 0; opacity: .8;
 }
-.map-dim button:hover { color: var(--accent-deep); border-color: var(--accent-line); }
-.map-dim button[aria-pressed="true"] {
+.sg-dim button:hover { color: var(--accent-deep); border-color: var(--accent-line); }
+.sg-dim button[aria-pressed="true"] {
   background: var(--accent); border-color: var(--accent); color: var(--on-accent);
 }
+.sg-dim button[aria-pressed="true"] em { opacity: .9; }
 @media (prefers-reduced-motion: no-preference) {
-  .map-dim button { transition: background .15s ease, color .15s ease, border-color .15s ease; }
-}
-.map-dim .md-note {
-  font-size: 13.5px; line-height: 1.5; color: var(--dim);
-  margin-left: 4px;
+  .sg-dim button { transition: background .15s ease, color .15s ease, border-color .15s ease; }
 }
 /* 3D 는 원근 때문에 세로 여유가 더 필요하다 */
 .map-canvas { height: clamp(400px, 56vw, 720px); }
@@ -1367,20 +1359,36 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 }
 
 /* 그래프 위의 한 줄 — 지금 무엇을 보고 있는지 · 2D/3D · 다시 만들기 */
+/* 바 높이를 못박는다.
+   flex-wrap 을 허용해 두었더니 파트가 바뀔 때(다시만들기 ↔ 2D/3D 토글)
+   내용이 줄바꿈되며 바 높이가 152 ↔ 142 로 변했고, 그만큼 캔버스가 744 ↔ 754
+   로 줄었다 늘어나 그래프 배율이 흔들렸다 — "스크롤하면서 비율이 달라진다"
+   가 이것이었다. 한 줄로 고정하고 넘치는 것은 감춘다. */
 .sg-bar {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 9px 12px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+  padding: 0 12px; height: 46px; flex: none;
   background: var(--panel-2); border-bottom: 1px solid var(--line);
-  min-height: 44px;
+  overflow: hidden;
 }
 .sg-state {
   font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
   text-transform: uppercase; color: var(--accent);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sg-dim { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* 생성이 끝나기 전 — 기다리는 중이라는 것을 색으로도 알린다 */
+.sg-state.is-wait { color: var(--warn); }
+
+/* 온톨로지가 다 만들어질 때까지 아래 파트는 잠긴다. 흐리게만 두면 고장난
+   것처럼 보이므로, 왜 기다리는지는 판독판에 글로 적는다(app.js 의 lockNote). */
+.stage-flow.is-locked #explore,
+.stage-flow.is-locked #qa { opacity: .55; }
+.stage-flow.is-locked #explore .ex-legend { opacity: .5; }
+.sg-dim { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+/* 바에서는 버튼만 남긴다. 자리 이름과 긴 설명은 이 폭에 들어가지 않는다. */
+.sg-dim .md-label, .sg-dim .md-note { display: none; }
 .sg-dim[hidden], .sg-replay[hidden] { display: none; }
 .sg-replay {
-  margin-left: auto;
+  margin-left: auto; flex: none; white-space: nowrap;
   cursor: pointer; font: inherit;
   font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
   padding: 6px 12px; border: 1px solid var(--line-2); border-radius: 2px;
@@ -1398,7 +1406,9 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 
 /* 조각이 날아가는 층 — 두 칸을 함께 덮어야 그래프에서 답변판까지 건너간다 */
 .sg-fly {
-  position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 6;
+  /* 모바일에서 .stage-graph 가 z-index 8 이므로 그보다 위여야 한다 —
+     아니면 조각이 그래프 띠 아래로 숨어 날아가는 것이 안 보인다. */
+  position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 12;
 }
 
 /* ── 흐르는 내용 ── */
