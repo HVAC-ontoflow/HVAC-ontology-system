@@ -275,6 +275,29 @@
     btn.addEventListener('click', ingReplay);
   });
 
+  /* 무대가 화면에 가까워지면 바로 시작한다.
+     예전에는 파트 01 이 '활성 파트' 가 된 뒤에 시작했다. 그러면 히어로에서
+     내려오는 동안은 아무것도 안 하고 있다가, 01 에 도착해서야 0 부터 만들기
+     시작해 첫 노드까지 한참 기다려야 했다. 한 화면 앞에서 미리 시작해 두면
+     도착했을 때 이미 자라고 있다. */
+  (function ingEarly() {
+    var stage = el('ingStage');
+    if (!stage) return;
+    function check() {
+      var b = stage.getBoundingClientRect();
+      var vh = window.innerHeight || 800;
+      if (b.top < vh * 1.6) { ingPlay(); }
+    }
+    var q = false;
+    window.addEventListener('scroll', function () {
+      if (q) return;
+      q = true;
+      window.requestAnimationFrame(function () { q = false; check(); });
+    }, { passive: true });
+    window.addEventListener('resize', check);
+    check();
+  }());
+
 
   /* ═══ 02 온톨로지 탐색 ═════════════════════════════════════════════
      오른쪽 그래프의 hover 를 왼쪽 판독판에 쓴다. graph.js 의 info(i) 가
@@ -377,27 +400,21 @@
 
   /* ═══ 03 질의응답 ═══════════════════════════════════════════════════
 
-     세 문항. 답이 되는 노드를 GRAPH 에서 실제로 찾는다.
+     세 문항을 세 페이지로 놓는다. 스크롤이 다음 문항을 연다.
 
-       ① 근거 추적   ZHUA01 의 설계풍량 값 노드 → sourcedFrom → 출처들
-       ② 부품 구성   ZHUA01 → hasPart → 부품들
-       ③ 정격 vs 계산  값 상태가 DIVERGENT(vNO)인 값 노드들
+     예전에는 한 자리에서 세 문항이 자동으로 돌아갔다. 그러면 읽던 답이
+     시간이 지나면 사라지고, 읽는 속도를 화면이 정해 버린다. 지금은 한 문항을
+     끝까지 보고, 스크롤해서 다음으로 간다. 이미 본 문항의 답은 그대로 남는다.
 
-     연출은 t-ranno 레퍼런스의 진행을 따른다.
-       질문 타이핑 → 그래프 눌림 → 매칭 노드 점등(차례로) →
-       노드가 왼쪽 슬롯으로 비행 → 근거·출처·조건 채움 → 리셋 → 다음 문항
+     답은 지어내지 않는다. qaResolve() 가 GRAPH 를 실제로 걸어 답이 되는
+     노드를 찾는다 — 그래프를 다시 뽑아도 답이 따라 바뀐다.
 
-     노드는 <canvas> 안에 있어 CSS 로 움직일 수 없다. 그래서 노드의 화면
-     좌표(graph.js 의 screenPos)에 DOM 조각을 하나 만들어 겹쳐 놓고,
-     그 조각을 슬롯 좌표까지 transform 으로 옮긴다 — 레퍼런스의 flyTo 와
-     같은 방법이다. */
-  var qaGraph = null, qaTimers = [], qaRunning = false, qaIdx = 0;
+     한 페이지의 진행
+       질문 타이핑 → 그래프에서 답 노드 초점 → 노드 자리에 고리 →
+       노드에서 슬롯까지 선 → 조각이 그 선을 따라 내려앉음 → 근거·출처·조건
+     ═══════════════════════════════════════════════════════════════ */
+  var QA = [], qaPages = [], qaCur = -1;
 
-  function qaLater(fn, ms) { qaTimers.push(setTimeout(fn, ms)); }
-  function qaClear() { qaTimers.forEach(clearTimeout); qaTimers = []; }
-
-  /* GRAPH 를 걸어서 답이 되는 노드를 찾는다. 손으로 적어 두지 않는 이유는
-     그래프를 다시 뽑았을 때 조용히 낡기 때문이다. */
   function qaResolve() {
     if (typeof GRAPH === 'undefined') return [];
     var N = GRAPH.nodes, E = GRAPH.edges;
@@ -420,129 +437,144 @@
 
     var eq = findEq('ZHUA01');
     var qs = [];
+    if (eq < 0) return qs;
 
-    /* ① 값 → 출처. 설계풍량 7,300 값 노드를 찾아 그 출처를 답으로 쓴다. */
-    if (eq >= 0) {
-      var vals = out(eq, 'hasQuantityValue', ['vOK', 'vNO', 'vTOL']);
-      var v7 = -1;
-      for (var a = 0; a < vals.length; a++) {
-        if (String(N[vals[a]].l).replace(/,/g, '') === '7300') { v7 = vals[a]; break; }
-      }
-      if (v7 >= 0) {
-        var srcs = out(v7, 'sourcedFrom', ['src']);
-        if (srcs.length) {
-          qs.push({
-            key: 'trace',
-            q: { ko: 'ZHUA01의 설계풍량 7,300 CMH는 어느 자료에서 나온 것인가',
-                 en: 'Which documents does the ZHUA01 design air flow of 7,300 CMH come from?' },
-            kind: { ko: '근거 추적', en: 'Evidence trace' },
-            anchor: eq, via: v7,
-            nodes: srcs.slice(0, 4),
-            meta: [
-              { k: { ko: '값', en: 'Value' }, v: '7,300 CMH' },
-              { k: { ko: '관계', en: 'Relation' }, v: 'hasQuantityValue → sourcedFrom' },
-              { k: { ko: '검증 상태', en: 'Status' }, v: 'VERIFIED' }
-            ],
-            note: { ko: '값 하나에 출처가 여러 개 매달려 있습니다. 도면과 계산서가 함께 나옵니다.',
-                    en: 'A single value carries several sources — the drawing and the calculation sheet together.' }
-          });
-        }
-      }
-
-      /* ② 부품 구성 */
-      var parts = out(eq, 'hasPart', null);
-      if (parts.length) {
+    /* ① 값 → 출처 */
+    var vals = out(eq, 'hasQuantityValue', ['vOK', 'vNO', 'vTOL']);
+    var v7 = -1;
+    for (var a = 0; a < vals.length; a++) {
+      if (String(N[vals[a]].l).replace(/,/g, '') === '7300') { v7 = vals[a]; break; }
+    }
+    if (v7 >= 0) {
+      var srcs = out(v7, 'sourcedFrom', ['src']);
+      if (srcs.length) {
         qs.push({
-          key: 'parts',
-          q: { ko: 'ZHUA01은 어떤 부품으로 구성되어 있는가',
-               en: 'What parts is ZHUA01 made of?' },
-          kind: { ko: '부품 구성', en: 'Composition' },
-          anchor: eq,
-          nodes: parts.slice(0, 4),
+          key: 'trace',
+          q: { ko: 'ZHUA01의 설계풍량 7,300 CMH는 어느 자료에서 나온 것인가',
+               en: 'Which documents does the ZHUA01 design air flow of 7,300 CMH come from?' },
+          kind: { ko: '근거 추적', en: 'Evidence trace' },
+          nodes: srcs.slice(0, 4),
+          lit: [eq, v7].concat(srcs.slice(0, 4)),
           meta: [
-            { k: { ko: '관계', en: 'Relation' }, v: 'brick:hasPart' },
-            { k: { ko: '부품 수', en: 'Parts' }, v: String(parts.length) },
-            { k: { ko: '주의', en: 'Note' }, v: 'hvo:hasPart 로 물으면 0행' }
+            { k: { ko: '값', en: 'Value' }, v: '7,300 CMH' },
+            { k: { ko: '관계 경로', en: 'Path' }, v: 'hasQuantityValue → sourcedFrom' },
+            { k: { ko: '검증 상태', en: 'Status' }, v: 'VERIFIED' }
           ],
-          note: { ko: '부품은 brick:hasPart 로 매달려 있습니다. 같은 이름의 hvo:hasPart 로 물으면 아무것도 나오지 않습니다.',
-                  en: 'Parts hang off brick:hasPart. Asking with hvo:hasPart instead returns nothing.' }
+          note: { ko: '값 하나에 출처가 여러 개 매달려 있습니다. 도면과 계산서가 함께 나옵니다.',
+                  en: 'A single value carries several sources — the drawing and the calculation sheet together.' }
         });
       }
     }
 
-    /* ③ 근거 사슬 — 한 덩어리로 묶인 답.
-
-       예전에는 그래프 전역에서 DIVERGENT 값 노드를 긁어 왔다. 서로 이어지지
-       않은 값들이라 답이 조각으로 흩어져 보였고, 무엇보다 "왜 그것들이
-       뽑혔는지" 를 화면에서 알 수 없었다.
-
-       근거 사슬은 층으로 묶여 있다.
-         설비 ──selectedBy──▶ 선정근거 ──derivedFrom──▶ 계산단계 ──basedOn──▶ 설계조건
-       그래서 답이 한 덩어리로 읽히고, 그래프에서도 이어진 무리로 밝아진다. */
-    if (eq >= 0) {
-      var basis = out(eq, 'selectedBy', ['basis']);
-      if (basis.length) {
-        var bi = basis[0];
-        var steps = out(bi, 'derivedFrom', ['calc']);
-        var conds = steps.length ? out(steps[0], 'basedOn', ['cond']) : [];
-        var csrc = steps.length ? out(steps[0], 'sourcedFrom', ['src']) : [];
-
-        /* 슬롯에는 층마다 하나씩 — 사슬의 등뼈가 보이게 */
-        var spine = [bi];
-        if (steps.length) spine.push(steps[0]);
-        if (conds.length) spine.push(conds[0]);
-        if (csrc.length) spine.push(csrc[0]);
-
-        /* 그래프에서는 덩어리 전체를 밝힌다 — 계산단계 넷과 설계조건 셋까지 */
-        var whole = [eq, bi].concat(steps, conds, csrc);
-
-        if (spine.length >= 3) {
-          qs.push({
-            key: 'why',
-            q: { ko: 'ZHUA01을 이 용량으로 고른 근거는 무엇인가',
-                 en: 'On what basis was ZHUA01 sized this way?' },
-            kind: { ko: '근거 사슬', en: 'Evidence chain' },
-            nodes: spine,
-            lit: whole,
-            meta: [
-              { k: { ko: '관계 경로', en: 'Path' },
-                v: 'selectedBy → derivedFrom → basedOn' },
-              { k: { ko: '계산단계', en: 'Calculation steps' },
-                v: String(steps.length) + (lang() === 'ko' ? '개' : '') },
-              { k: { ko: '설계조건', en: 'Design conditions' },
-                v: String(conds.length) + (lang() === 'ko' ? '종' : '') }
-            ],
-            note: { ko: '값 하나 뒤에 선정근거 · 계산단계 · 설계조건이 층으로 매달려 있습니다. 이 묶음이 "왜 그 값인가"에 대한 답입니다.',
-                    en: 'Behind a single value sit the design basis, the calculation steps and the design conditions, layered. That bundle is the answer to "why this value".' }
-          });
-        }
-      }
+    /* ② 부품 구성 */
+    var parts = out(eq, 'hasPart', null);
+    if (parts.length) {
+      qs.push({
+        key: 'parts',
+        q: { ko: 'ZHUA01은 어떤 부품으로 구성되어 있는가',
+             en: 'What parts is ZHUA01 made of?' },
+        kind: { ko: '부품 구성', en: 'Composition' },
+        nodes: parts.slice(0, 4),
+        lit: [eq].concat(parts),
+        meta: [
+          { k: { ko: '관계', en: 'Relation' }, v: 'brick:hasPart' },
+          { k: { ko: '부품 수', en: 'Parts' }, v: String(parts.length) },
+          { k: { ko: '주의', en: 'Note' }, v: 'hvo:hasPart 로 물으면 0행' }
+        ],
+        note: { ko: '부품은 brick:hasPart 로 매달려 있습니다. 같은 이름의 hvo:hasPart 로 물으면 아무것도 나오지 않습니다.',
+                en: 'Parts hang off brick:hasPart. Asking with hvo:hasPart instead returns nothing.' }
+      });
     }
 
+    /* ③ 근거 사슬 — 층으로 묶인 한 덩어리.
+       설비 ──selectedBy──▶ 선정근거 ──derivedFrom──▶ 계산단계 ──basedOn──▶ 설계조건 */
+    var basis = out(eq, 'selectedBy', ['basis']);
+    if (basis.length) {
+      var bi = basis[0];
+      var steps = out(bi, 'derivedFrom', ['calc']);
+      var conds = steps.length ? out(steps[0], 'basedOn', ['cond']) : [];
+      var csrc = steps.length ? out(steps[0], 'sourcedFrom', ['src']) : [];
+      var spine = [bi];
+      if (steps.length) spine.push(steps[0]);
+      if (conds.length) spine.push(conds[0]);
+      if (csrc.length) spine.push(csrc[0]);
+      if (spine.length >= 3) {
+        qs.push({
+          key: 'why',
+          q: { ko: 'ZHUA01을 이 용량으로 고른 근거는 무엇인가',
+               en: 'On what basis was ZHUA01 sized this way?' },
+          kind: { ko: '근거 사슬', en: 'Evidence chain' },
+          nodes: spine,
+          lit: [eq, bi].concat(steps, conds, csrc),
+          meta: [
+            { k: { ko: '관계 경로', en: 'Path' }, v: 'selectedBy → derivedFrom → basedOn' },
+            { k: { ko: '계산단계', en: 'Calculation steps' },
+              v: String(steps.length) + (lang() === 'ko' ? '개' : '') },
+            { k: { ko: '설계조건', en: 'Design conditions' },
+              v: String(conds.length) + (lang() === 'ko' ? '종' : '') }
+          ],
+          note: { ko: '값 하나 뒤에 선정근거 · 계산단계 · 설계조건이 층으로 매달려 있습니다. 이 묶음이 "왜 그 값인가"에 대한 답입니다.',
+                  en: 'Behind a single value sit the design basis, the calculation steps and the design conditions, layered. That bundle is the answer to "why this value".' }
+        });
+      }
+    }
     return qs;
   }
 
-  var QA = [];
+  /* 세 페이지의 뼈대를 만든다. 답은 페이지가 열릴 때 채운다. */
+  register(function qaRender() {
+    var host = el('qaPages');
+    if (!host) return;
+    QA = qaResolve();
+    var L = lang() === 'ko';
 
-  function qaReset() {
-    var slots = el('qaSlots'), meta = el('qaMeta'), fly = el('qaFly');
-    if (slots) slots.innerHTML = '';
-    if (meta) meta.innerHTML = '';
-    if (fly) fly.innerHTML = '';
-    var ans = el('qaAns');
-    if (ans) ans.classList.remove('is-ready');
-    if (qaGraph) qaGraph.clearFocus();
+    host.innerHTML = QA.map(function (q, i) {
+      return '' +
+        '<section class="qa2-page" data-i="' + i + '">' +
+          '<div class="qa2-ask">' +
+            '<div class="qa2-who">' +
+              '<span class="qa2-who-t">' + (L ? '질문' : 'Question') + '</span>' +
+              '<span class="qa2-who-s">' + (L ? '사람이 입력한 문장' : 'typed by a person') + '</span>' +
+              '<span class="qa2-no">' + (i + 1) + ' / ' + QA.length + '</span>' +
+            '</div>' +
+            '<p class="qa2-q"></p>' +
+          '</div>' +
+          '<div class="qa2-ans">' +
+            '<div class="qa2-who">' +
+              '<span class="qa2-who-t">' + (L ? '온톨로지 기반 답변' : 'Answer from the ontology') + '</span>' +
+              '<span class="qa2-state"></span>' +
+            '</div>' +
+            '<ol class="qa2-slots"></ol>' +
+            '<dl class="qa2-meta"></dl>' +
+          '</div>' +
+        '</section>';
+    }).join('');
+
+    qaPages = Array.prototype.slice.call(host.querySelectorAll('.qa2-page'));
+    qaTimers = [];
+    qaPages.forEach(function (p, i) { p.dataset.state = 'idle'; qaTimers[i] = []; });
+    qaCur = -1;
+    /* 언어를 바꾸면 뼈대를 다시 만들었으므로 지금 페이지를 다시 연다 */
+    if (typeof qaSync === 'function') qaSync();
+  });
+
+  /* 타이머를 페이지별로 나눠 둔다.
+     예전에는 한 배열에 모아 두고 파트를 벗어날 때 통째로 지웠다. 그러면
+     질문을 쓰는 중에 스크롤 한 번으로 타이핑이 "ZHU" 에서 멈추고, 페이지는
+     이미 '재생됨' 으로 표시돼 있어 다시 와도 그 상태로 영구히 남았다.
+     지금은 페이지마다 따로 걷고, 끝내지 못한 페이지는 되돌린다. */
+  var qaTimers = [[], [], []];
+  function qaLaterFor(i, fn, ms) {
+    if (!qaTimers[i]) qaTimers[i] = [];
+    qaTimers[i].push(setTimeout(fn, ms));
   }
-
-  function qaSetState(txt) {
-    var st = el('qaState');
-    if (st) st.textContent = txt;
+  function qaClearFor(i) {
+    (qaTimers[i] || []).forEach(clearTimeout);
+    qaTimers[i] = [];
   }
+  function qaClear() { for (var i = 0; i < qaTimers.length; i++) qaClearFor(i); }
 
-  /* 질문을 한 글자씩 쓴다. 사람이 타이핑하는 것처럼 보여야 '사람이 물었다'가
-     읽힌다. reduced-motion 이면 한 번에 놓는다. */
-  function qaType(str, done) {
-    var host = el('qaQ');
+  function qaType(host, str, later, done) {
     if (!host) { done(); return; }
     if (reduced) { host.textContent = str; done(); return; }
     var i = 0;
@@ -550,46 +582,35 @@
     host.classList.add('is-typing');
     (function tick() {
       host.textContent = str.slice(0, ++i);
-      if (i < str.length) qaLater(tick, 34 + Math.random() * 34);
-      else { host.classList.remove('is-typing'); qaLater(done, 900); }
+      if (i < str.length) later(tick, 34 + Math.random() * 34);
+      else { host.classList.remove('is-typing'); later(done, 900); }
     }());
   }
 
-  /* 노드 하나를 슬롯으로 옮긴다.
-
-     세 단계로 나눈다 — 어디서 뽑아오는지가 보여야 하기 때문이다.
-       ① 노드 자리에 고리를 띄운다        (그래프의 어느 점인지)
-       ② 노드에서 슬롯까지 선을 긋는다     (어디로 가는지)
-       ③ 조각이 그 선을 따라 내려앉는다
-
-     노드는 <canvas> 안에 있어 CSS 로 움직일 수 없다. 그래서 노드의 화면
-     좌표(graph.js 의 screenPos)에 DOM 조각을 만들어 겹쳐 놓고 옮긴다.
-     좌표는 fly 층(.qa2-fly, 두 칸을 함께 덮는다) 기준으로 환산한다. */
-  function qaFlyNode(nodeIdx, slotLi, label, color, done) {
+  /* 노드 하나를 슬롯으로 옮긴다. 어디서 뽑아오는지가 보여야 하므로
+     고리 → 선 → 조각의 세 단계로 나눈다. 노드는 <canvas> 안에 있어 CSS 로
+     움직일 수 없으므로, 화면 좌표에 DOM 조각을 겹쳐 놓고 옮긴다. */
+  function qaFlyNode(nodeIdx, slotLi, label, color, later, done) {
     var fly = el('qaFly'), canvas = el('oneGraph');
-    if (!fly || !canvas || !qaGraph || reduced) { done(); return; }
-    var p = qaGraph.screenPos(nodeIdx);
+    if (!fly || !canvas || !G || reduced) { done(); return; }
+    var p = G.screenPos(nodeIdx);
     if (!p) { done(); return; }
 
     var cb = canvas.getBoundingClientRect(), fb = fly.getBoundingClientRect();
     var x0 = cb.left - fb.left + p.x, y0 = cb.top - fb.top + p.y;
 
-    /* ① 노드 자리에 고리 */
     var mark = document.createElement('span');
     mark.className = 'qa2-mark';
     mark.style.left = x0 + 'px';
     mark.style.top = y0 + 'px';
     fly.appendChild(mark);
-    /* 클래스를 붙이기 전에 한 번 읽어 두어야 애니메이션이 처음부터 돈다 */
     void mark.offsetWidth;
     mark.classList.add('is-on');
 
-    /* 목표 — 슬롯의 점 */
     var dotEl = slotLi.querySelector('.qs-dot');
     var b2 = (dotEl || slotLi).getBoundingClientRect();
     var x1 = b2.left - fb.left + b2.width / 2, y1 = b2.top - fb.top + b2.height / 2;
 
-    /* ② 노드 → 슬롯 선 */
     var dx = x1 - x0, dy = y1 - y0;
     var len = Math.sqrt(dx * dx + dy * dy);
     var ang = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -604,8 +625,7 @@
     wire.classList.add('is-on');
     wire.style.transform = 'rotate(' + ang.toFixed(2) + 'deg) scaleX(1)';
 
-    /* ③ 선이 다 그어진 뒤에 조각을 보낸다 */
-    qaLater(function () {
+    later(function () {
       var chip = document.createElement('span');
       chip.className = 'qa2-chip';
       chip.style.setProperty('--c', color);
@@ -613,21 +633,19 @@
       chip.style.left = x0 + 'px';
       chip.style.top = y0 + 'px';
       fly.appendChild(chip);
-
       /* getBoundingClientRect 가 그 자리에서 레이아웃을 계산하므로 방금 붙인
-         조각의 크기도 이미 정확하다 — requestAnimationFrame 을 기다리면
-         프레임이 굶는 환경에서 답변이 영구히 비어 있게 된다. */
+         조각의 크기도 이미 정확하다 — rAF 를 기다리면 프레임이 굶는 환경에서
+         답변이 영구히 비어 있게 된다. */
       var a2 = chip.getBoundingClientRect();
       var cx = a2.left - fb.left + a2.width / 2, cy = a2.top - fb.top + a2.height / 2;
       chip.classList.add('is-fly');
       chip.style.transform = 'translate(' + (x1 - cx) + 'px,' + (y1 - cy) + 'px) scale(.62)';
-
-      qaLater(function () {
+      later(function () {
         chip.classList.add('is-done');
         wire.classList.remove('is-on');
         wire.classList.add('is-off');
         done();
-        qaLater(function () {
+        later(function () {
           [chip, wire, mark].forEach(function (n) {
             if (n.parentNode) n.parentNode.removeChild(n);
           });
@@ -636,96 +654,128 @@
     }, 560);
   }
 
-  function qaRun() {
-    if (!QA.length) return;
-    var q = QA[qaIdx % QA.length];
+  /* 페이지를 처음 상태로 되돌린다. 끝까지 가지 못한 것만 되돌린다 —
+     끝난 페이지를 되돌리면 읽고 있던 답이 사라진다. */
+  function qaReset(i) {
+    var page = qaPages[i];
+    if (!page) return;
+    qaClearFor(i);
+    page.dataset.state = 'idle';
+    var q = page.querySelector('.qa2-q');
+    if (q) { q.textContent = ''; q.classList.remove('is-typing'); }
+    var st = page.querySelector('.qa2-state');
+    if (st) st.textContent = '';
+    var sl = page.querySelector('.qa2-slots');
+    if (sl) sl.innerHTML = '';
+    var mt = page.querySelector('.qa2-meta');
+    if (mt) mt.innerHTML = '';
+    var ans = page.querySelector('.qa2-ans');
+    if (ans) ans.classList.remove('is-ready');
+  }
+
+  /* 한 페이지를 연다.
+       idle     처음부터 질문을 쓰고 답을 찾는다
+       running  그대로 둔다 (다시 부르면 처음으로 돌아가 버린다)
+       done     초점만 다시 맞춘다 — 답은 기록으로 남긴다 */
+  function qaOpen(i) {
+    var page = qaPages[i], q = QA[i];
+    if (!page || !q) return;
+
+    if (G) G.focus(q.lit ? q.lit.slice() : q.nodes.slice());
+
+    var state = page.dataset.state || 'idle';
+    if (state === 'done' || state === 'running') return;
+    page.dataset.state = 'running';
+
     var L = lang() === 'ko';
-    var slots = el('qaSlots'), meta = el('qaMeta'), ans = el('qaAns');
-    if (!slots) return;
+    var qEl = page.querySelector('.qa2-q');
+    var stEl = page.querySelector('.qa2-state');
+    var slots = page.querySelector('.qa2-slots');
+    var meta = page.querySelector('.qa2-meta');
+    var ans = page.querySelector('.qa2-ans');
+    function later(fn, ms) { qaLaterFor(i, fn, ms); }
+    function say(txt) { if (stEl) stEl.textContent = txt; }
 
-    qaReset();
-    qaSetState(L ? '질문 수신' : 'question received');
-
-    /* 답 슬롯을 미리 비워 놓는다. 몇 개가 올지 먼저 보이는 편이
-       '채워진다'로 읽힌다 — 빈 칸이 없으면 그냥 나타나는 것이 된다. */
+    say(L ? '질문 수신' : 'question received');
     slots.innerHTML = q.nodes.map(function () {
       return '<li class="qs"><i class="qs-dot"></i>' +
              '<span class="qs-nm"></span><span class="qs-ty"></span></li>';
     }).join('');
     var lis = Array.prototype.slice.call(slots.querySelectorAll('.qs'));
 
-    qaType(t(q.q), function () {
-      qaSetState(L ? '그래프 탐색 중…' : 'searching the graph…');
-
-      /* 답이 되는 노드를 밝힌다. 앵커(설비)도 함께 밝혀 어디서 출발한
-         답인지 보이게 한다. */
-      /* 밝힐 범위. 답 슬롯에 올리는 것(nodes)과 그래프에서 밝히는 것(lit)을
-         나눠 둔다 — 근거 사슬처럼 덩어리로 보여야 하는 문항은 슬롯에는
-         등뼈만 올리고 그래프에서는 무리 전체를 밝힌다. */
-      var lit = q.lit ? q.lit.slice() : q.nodes.slice();
-      if (q.anchor !== undefined) lit.push(q.anchor);
-      if (q.via !== undefined) lit.push(q.via);
-      if (qaGraph) qaGraph.focus(lit);
-
-      qaLater(function () {
-        qaSetState(L ? '노드를 답변으로 옮기는 중…' : 'moving nodes into the answer…');
-
+    qaType(qEl, t(q.q), later, function () {
+      say(L ? '그래프 탐색 중…' : 'searching the graph…');
+      later(function () {
+        say(L ? '노드를 답변으로 옮기는 중…' : 'moving nodes into the answer…');
         q.nodes.forEach(function (ni, n) {
-          qaLater(function () {
+          later(function () {
             var nd = GRAPH.nodes[ni];
             var OG = window.OntoGraph;
             var m = (OG && OG.TYPES[nd.t]) || { c: '#6ab4ff', ko: '', en: '' };
             var li = lis[n];
-            qaFlyNode(ni, li, nd.l, m.c, function () {
+            qaFlyNode(ni, li, nd.l, m.c, later, function () {
               li.classList.add('is-on');
-              li.style.setProperty('--c', m.c);
               li.querySelector('.qs-dot').style.background = m.c;
               li.querySelector('.qs-nm').textContent = nd.l;
               li.querySelector('.qs-ty').textContent = L ? m.ko : m.en;
             });
           }, 1250 * n);
         });
-
-        /* 근거 · 출처 · 조건 — 노드가 다 내려앉은 뒤에 붙는다 */
-        var tAfter = 1250 * q.nodes.length + (reduced ? 40 : 1900);
-        qaLater(function () {
-          if (meta) {
-            meta.innerHTML = q.meta.map(function (m) {
-              return '<div><dt>' + esc(t(m.k)) + '</dt><dd>' + esc(t(m.v)) + '</dd></div>';
-            }).join('') +
-            '<div class="qm-note"><dt>' + (L ? '읽는 법' : 'How to read it') +
-              '</dt><dd>' + brs(esc(t(q.note))) + '</dd></div>';
-          }
+        later(function () {
+          meta.innerHTML = q.meta.map(function (m) {
+            return '<div><dt>' + esc(t(m.k)) + '</dt><dd>' + esc(t(m.v)) + '</dd></div>';
+          }).join('') +
+          '<div class="qm-note"><dt>' + (L ? '읽는 법' : 'How to read it') +
+            '</dt><dd>' + brs(esc(t(q.note))) + '</dd></div>';
           if (ans) ans.classList.add('is-ready');
-          qaSetState(L ? '답변 완료' : 'answered');
-
-          /* 다음 문항으로. 읽을 시간을 준 뒤에 넘긴다. */
-          qaLater(function () {
-            qaIdx++;
-            if (qaRunning) qaRun();
-          }, reduced ? 8000 : 7000);
-        }, tAfter);
+          say(L ? '답변 완료' : 'answered');
+          page.dataset.state = 'done';      /* 여기까지 와야 기록으로 남는다 */
+        }, 1250 * q.nodes.length + (reduced ? 40 : 1900));
       }, reduced ? 60 : 1100);
     });
   }
 
-  function qaStart() {
-    if (qaRunning || !QA.length) return;
-    if (!ontologyReady) return;
-    qaRunning = true;
-    qaIdx = 0;
-    qaRun();
-  }
-  function qaStop() {
-    qaRunning = false;
-    qaClear();
+  /* 스크롤 → 어느 문항을 보고 있는지 */
+  function qaSync() {
+    if (!qaPages.length || !ontologyReady) return;
+    var mid = (window.innerHeight || 800) * 0.42;
+    var pick = 0;
+    for (var i = 0; i < qaPages.length; i++) {
+      if (qaPages[i].getBoundingClientRect().top <= mid) pick = i;
+    }
+    for (var k = 0; k < qaPages.length; k++) {
+      qaPages[k].classList.toggle('is-cur', k === pick);
+    }
+    if (pick === qaCur) return;
+    qaCur = pick;
+    /* 지금 페이지가 아닌데 끝까지 가지 못한 것은 되돌린다. 그래야 다시
+       그 문항으로 왔을 때 처음부터 질문을 쓰고 답을 찾는다. */
+    for (var m = 0; m < qaPages.length; m++) {
+      if (m !== pick && (qaPages[m].dataset.state || 'idle') === 'running') qaReset(m);
+    }
+    qaOpen(pick);
   }
 
-  register(function qaChrome() {
-    /* 언어를 바꾸면 문항 자체를 다시 만든다 — meta 안에 언어별 문구가 있다 */
-    QA = qaResolve();
-    if (qaRunning) { qaClear(); qaIdx = 0; qaRun(); }
-  });
+  /* 파트를 벗어날 때. 진행 중이던 페이지는 되돌려 둔다 — 중간에 멈춘 화면을
+     그대로 남기면 다시 왔을 때 "ZHU" 에서 끊긴 질문을 보게 된다. */
+  function qaStop() {
+    for (var i = 0; i < qaPages.length; i++) {
+      if ((qaPages[i].dataset.state || 'idle') === 'running') qaReset(i);
+      else qaClearFor(i);
+    }
+    qaCur = -1;
+    if (G) G.clearFocus();
+  }
+
+  (function qaScroll() {
+    var q = false;
+    window.addEventListener('scroll', function () {
+      if (q) return;
+      q = true;
+      window.requestAnimationFrame(function () { q = false; qaSync(); });
+    }, { passive: true });
+    window.addEventListener('resize', qaSync);
+  }());
 
 
   /* ═══ 그래프 ═══════════════════════════════════════════════════════
@@ -765,11 +815,14 @@
         host.innerHTML = nd ? exReadNode(nd) : exReadEmpty();
       }
     });
+    /* 예전에 캔버스가 셋이던 흔적. 지금은 G 하나이므로 옛 이름들은 그것을
+       가리키게 해 둔다 — qaGraph 는 질의응답을 페이지로 바꿀 때 없애서,
+       여기 대입이 남아 있으면 ReferenceError 로 스크립트가 멈춘다. */
     ingGraph = G;
-    qaGraph = G;
     exGraph = G;
     dimToggleRedraw();
     QA = qaResolve();
+    qaSync();
   }());
 
   /* ── 스크롤 → 상태 ──
@@ -836,7 +889,7 @@
         var h2 = el('exRead');
         if (h2) h2.innerHTML = exReadEmpty();
       } else if (STATE === 'qa') {
-        qaStart();
+        qaSync();
       } else {
         qaStop();
         G.clearFocus();

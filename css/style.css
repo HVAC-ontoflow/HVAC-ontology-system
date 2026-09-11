@@ -639,7 +639,7 @@ h2 {
   .vh-cq, .claim-doc, .op-note, .gc-t, .fu-l, .bh-t, .cap-go, .cap-n,
   .foot-back, .dist h3, .siblings h3, .q-jump, .excerpt > summary,
   .detail-dl dt, .bldg dt, .graph-cap .gc-t,
-  .qa2-who-t, .qa2-state, .qh-n, .sg-dim button em, .badge-ko,
+  .qa2-who-t, .qa2-state, .qa2-no, .qh-n, .sg-dim button em, .badge-ko,
   .ing-cap, .ex-kicker, .qa2-meta dt
 ) {
   letter-spacing: .02em; text-transform: none;
@@ -1058,14 +1058,25 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
   .ing-replay { transition: color .2s ease, border-color .2s ease; }
 }
 
-/* 세 자리에 이름만 붙인다 */
+/* 두 칸에 이름만 붙인다. 열 규격은 .ing 와 글자 하나까지 같아야 한다 —
+   캡션이 자기 칸 밑에 놓이지 않으면 무엇을 가리키는지 알 수 없다. */
 .ing-cap {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 1.05fr);
+  gap: 0;
   margin: 10px 0 0;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
   text-transform: uppercase; color: var(--dimmer);
 }
+/* 한 줄로. 접히면 두 칸의 밑줄이 어긋나 보인다. */
+.ing-cap > span {
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ing-cap .ing-cap-m { color: var(--accent); }
+/* 좁은 화면의 .ing 열 규격을 그대로 따라간다. 이 규칙이 위쪽 미디어쿼리보다
+   뒤에 와야 덮인다 — 순서가 바뀌면 캡션 밑줄이 다시 어긋난다. */
+@media (max-width: 860px) {
+  .ing-cap { grid-template-columns: minmax(0, .85fr) minmax(150px, 1fr); }
+}
 
 .f3-hand {
   margin: clamp(22px, 2.4vw, 34px) 0 0;
@@ -1203,6 +1214,34 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 }
 
 /* 질문 — 왼쪽 굵은 선으로 '들어온 것'을 표시한다 */
+/* ── 세 페이지 ──
+   한 문항을 끝까지 보고 스크롤해서 다음으로 간다. 페이지마다 화면 높이만큼
+   자리를 줘서, 스크롤 한 번이 문항 하나에 대응한다.
+
+   지금 보고 있지 않은 문항은 눌러 둔다 — 세 개가 같은 무게로 놓여 있으면
+   어느 것이 지금 것인지 알 수 없다. 다만 지운 것처럼 보이면 안 되므로
+   읽을 수는 있게 남긴다(이미 본 답은 기록으로 남는 편이 낫다). */
+.qa2-pages { display: grid; gap: clamp(40px, 6vw, 96px); }
+.qa2-page {
+  display: grid; gap: clamp(14px, 1.6vw, 22px); align-content: start;
+  opacity: .42;
+  transition: opacity .5s ease;
+}
+.qa2-page.is-cur { opacity: 1; }
+@media (min-width: 1080px) {
+  .qa2-page { min-height: 74vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa2-page { opacity: 1; transition: none; }
+}
+/* 몇 번째 문항인지 */
+.qa2-no {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+  color: var(--dimmer);
+}
+.qa2-page.is-cur .qa2-no { color: var(--accent); }
+
 .qa2-ask { border-left: 2px solid var(--accent); padding-left: 18px; }
 .qa2-q {
   margin: 0; min-height: 3.2em;
@@ -1311,12 +1350,7 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 }
 .qa2-chip.is-done { opacity: 0; }
 
-.qa2-foot {
-  margin: clamp(20px, 2.2vw, 30px) 0 0;
-  max-width: var(--measure);
-  font-size: 14px; line-height: 1.7; color: var(--dim);
-  border-top: 1px solid var(--line); padding-top: 14px;
-}
+
 
 @media (prefers-reduced-motion: reduce) {
   .qa2-chip.is-fly { transition: none; }

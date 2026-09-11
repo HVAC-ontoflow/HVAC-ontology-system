@@ -49,7 +49,10 @@
     zone:  { c: '#9dc0e4', r: 2.9, ko: '존',              en: 'Zone' },
     space: { c: '#7d97b2', r: 2.9, ko: '공간',            en: 'Space' },
     vOK:   { c: '#3ddc97', r: 2.8, ko: '값 · 교차검증',    en: 'Value · cross-validated' },
-    vNO:   { c: '#fb923c', r: 2.8, ko: '값 · 불일치',      en: 'Value · divergent' },
+    /* '불일치' 는 틀렸다는 뜻으로 읽힌다. 이 상태는 두 문서에 다르게 적혀
+       있다는 사실이고 어느 쪽도 틀린 값이 아니다 — 화면의 다른 자리와 같은
+       말을 쓴다. 색도 경고색(#fb923c)에서 차분한 금색으로 내렸다. */
+    vNO:   { c: '#f0be74', r: 2.8, ko: '값 · 두 자료가 다름', en: 'Value · divergent' },
     vTOL:  { c: '#38bdf8', r: 2.8, ko: '값 · 허용오차 내',  en: 'Value · within tolerance' },
     src:   { c: '#647c96', r: 2.3, ko: '출처',            en: 'Source' }
   };

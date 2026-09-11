@@ -273,6 +273,7 @@
               </div>
               <ul class="pipe-items" id="stAList"></ul>
             </div>
+          </div>
         </div>
 
         <p class="ing-cap">
@@ -310,29 +311,14 @@
         <!-- 리드 문단은 뺐다. 화면이 스스로 보여 주는 것을 글로 다시
              설명하고 있었다. -->
 
-        <div class="qa2-ask">
-          <div class="qa2-who">
-            <span class="qa2-who-t"><span class="ko">질문</span><span class="en">Question</span></span>
-            <span class="qa2-who-s"><span class="ko">사람이 입력한 문장</span><span class="en">typed by a person</span></span>
-          </div>
-          <p class="qa2-q" id="qaQ"></p>
-        </div>
+        <!-- 세 문항이 세 페이지로 놓인다. 스크롤이 다음 문항을 연다 —
+             자동으로 돌아가면 읽던 답이 사라져 버리고, 읽는 속도를 화면이
+             정해 버린다. 페이지는 js/app.js 의 qaRender() 가 만든다. -->
+        <div class="qa2-pages" id="qaPages"></div>
 
-        <div class="qa2-ans" id="qaAns">
-          <div class="qa2-who">
-            <span class="qa2-who-t"><span class="ko">온톨로지 기반 답변</span><span class="en">Answer from the ontology</span></span>
-            <span class="qa2-state" id="qaState"></span>
-          </div>
-          <ol class="qa2-slots" id="qaSlots"></ol>
-          <dl class="qa2-meta" id="qaMeta"></dl>
-        </div>
-
-        <p class="qa2-foot">
-          <span class="ko">답은 지어낸 문장이 아닙니다. 오른쪽 그래프에서 실제로 찾아낸
-            개체이고, 출처는 그 개체에 매달린 SourceReference 그대로입니다.</span>
-          <span class="en">These answers are not generated sentences. They are individuals actually
-            found in the graph, with the SourceReference attached to each one.</span>
-        </p>
+        <!-- "답은 지어낸 문장이 아닙니다 …" 문단은 뺐다.
+             화면이 이미 그것을 보여 준다 — 노드가 그래프에서 내려오고
+             출처가 슬롯에 클래스와 함께 찍힌다. 글로 한 번 더 말할 자리가 아니다. -->
       </article>
 
     </div>
@@ -347,17 +333,18 @@
 <footer class="foot shell">
   <div>
     <p class="made">
-      <span class="ko"><strong>성균관대학교 건설환경공학부</strong> · 2026년 제14회 HVAC 경진대회 ·
-        지도교수 윤성민 · 참여학생 김건우 · 류채원 · 이유진 · 장병준 · 최윤서</span>
+      <span class="ko"><strong>성균관대학교 건설환경공학부</strong> · 2026년 제14회 HVAC 경진대회 · 지도교수 윤성민<br>
+        참여학생 김건우 · 류채원 · 이유진 · 장병준 · 최윤서</span>
       <span class="en"><strong>School of Civil, Architectural Engineering and Landscape Architecture,
-        Sungkyunkwan University</strong> · 14th HVAC Competition 2026 · Advisor Sungmin Yoon ·
+        Sungkyunkwan University</strong> · 14th HVAC Competition 2026 · Advisor Sungmin Yoon<br>
         Geonwoo Kim · Chaewon Ryu · Yujin Lee · Byeongjun Jang · Yunseo Choi</span>
     </p>
     <p class="note">
-      <span class="ko">건물 운영 단계에서의 활용을 위한 설계 및 현장 정보의 지식 자산화 ·
-        대상 건물: 수도권 · 위치 비공개 업무시설</span>
+      <span class="ko">건물 운영 단계에서의 활용을 위한 설계 및 현장 정보의 지식 자산화 · 대상 건물: 수도권<br>
+        위치 비공개 업무시설</span>
       <span class="en">Turning design and field information into a knowledge asset for the building
-        operation stage · Case building: an office facility in the Seoul metropolitan area</span>
+        operation stage<br>
+        Case building: an office facility in the Seoul metropolitan area (site withheld)</span>
     </p>
   </div>
   <a class="foot-back" href="#top">
