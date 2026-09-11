@@ -470,24 +470,53 @@
       }
     }
 
-    /* ③ 정격값과 계산값이 어긋난 값 노드 */
-    var diverg = [];
-    for (var b = 0; b < N.length; b++) if (N[b].t === 'vNO') diverg.push(b);
-    if (diverg.length) {
-      qs.push({
-        key: 'diverge',
-        q: { ko: '정격값과 계산값이 어긋난 값은 어떤 것인가',
-             en: 'Which values disagree between the rated and the calculated figure?' },
-        kind: { ko: '정격 vs 계산', en: 'Rated vs calculated' },
-        nodes: diverg.slice(0, 4),
-        meta: [
-          { k: { ko: '상태', en: 'Status' }, v: 'DIVERGENT' },
-          { k: { ko: '전체', en: 'Total' }, v: fmt(493) + (lang() === 'ko' ? '개' : '') },
-          { k: { ko: '처리', en: 'Handling' }, v: { ko: '두 값 모두 보존', en: 'both values kept' } }
-        ],
-        note: { ko: '어느 쪽도 틀린 값이 아닙니다. 두 자료에 다르게 적혀 있다는 사실을 그대로 남깁니다.',
-                en: 'Neither figure is wrong. The fact that the two documents disagree is what gets recorded.' }
-      });
+    /* ③ 근거 사슬 — 한 덩어리로 묶인 답.
+
+       예전에는 그래프 전역에서 DIVERGENT 값 노드를 긁어 왔다. 서로 이어지지
+       않은 값들이라 답이 조각으로 흩어져 보였고, 무엇보다 "왜 그것들이
+       뽑혔는지" 를 화면에서 알 수 없었다.
+
+       근거 사슬은 층으로 묶여 있다.
+         설비 ──selectedBy──▶ 선정근거 ──derivedFrom──▶ 계산단계 ──basedOn──▶ 설계조건
+       그래서 답이 한 덩어리로 읽히고, 그래프에서도 이어진 무리로 밝아진다. */
+    if (eq >= 0) {
+      var basis = out(eq, 'selectedBy', ['basis']);
+      if (basis.length) {
+        var bi = basis[0];
+        var steps = out(bi, 'derivedFrom', ['calc']);
+        var conds = steps.length ? out(steps[0], 'basedOn', ['cond']) : [];
+        var csrc = steps.length ? out(steps[0], 'sourcedFrom', ['src']) : [];
+
+        /* 슬롯에는 층마다 하나씩 — 사슬의 등뼈가 보이게 */
+        var spine = [bi];
+        if (steps.length) spine.push(steps[0]);
+        if (conds.length) spine.push(conds[0]);
+        if (csrc.length) spine.push(csrc[0]);
+
+        /* 그래프에서는 덩어리 전체를 밝힌다 — 계산단계 넷과 설계조건 셋까지 */
+        var whole = [eq, bi].concat(steps, conds, csrc);
+
+        if (spine.length >= 3) {
+          qs.push({
+            key: 'why',
+            q: { ko: 'ZHUA01을 이 용량으로 고른 근거는 무엇인가',
+                 en: 'On what basis was ZHUA01 sized this way?' },
+            kind: { ko: '근거 사슬', en: 'Evidence chain' },
+            nodes: spine,
+            lit: whole,
+            meta: [
+              { k: { ko: '관계 경로', en: 'Path' },
+                v: 'selectedBy → derivedFrom → basedOn' },
+              { k: { ko: '계산단계', en: 'Calculation steps' },
+                v: String(steps.length) + (lang() === 'ko' ? '개' : '') },
+              { k: { ko: '설계조건', en: 'Design conditions' },
+                v: String(conds.length) + (lang() === 'ko' ? '종' : '') }
+            ],
+            note: { ko: '값 하나 뒤에 선정근거 · 계산단계 · 설계조건이 층으로 매달려 있습니다. 이 묶음이 "왜 그 값인가"에 대한 답입니다.',
+                    en: 'Behind a single value sit the design basis, the calculation steps and the design conditions, layered. That bundle is the answer to "why this value".' }
+          });
+        }
+      }
     }
 
     return qs;
@@ -630,7 +659,10 @@
 
       /* 답이 되는 노드를 밝힌다. 앵커(설비)도 함께 밝혀 어디서 출발한
          답인지 보이게 한다. */
-      var lit = q.nodes.slice();
+      /* 밝힐 범위. 답 슬롯에 올리는 것(nodes)과 그래프에서 밝히는 것(lit)을
+         나눠 둔다 — 근거 사슬처럼 덩어리로 보여야 하는 문항은 슬롯에는
+         등뼈만 올리고 그래프에서는 무리 전체를 밝힌다. */
+      var lit = q.lit ? q.lit.slice() : q.nodes.slice();
       if (q.anchor !== undefined) lit.push(q.anchor);
       if (q.via !== undefined) lit.push(q.via);
       if (qaGraph) qaGraph.focus(lit);
