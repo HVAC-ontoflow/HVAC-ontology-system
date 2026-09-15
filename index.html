@@ -324,6 +324,9 @@
     </div>
 
     <!-- 조각이 날아가는 층. 두 칸을 함께 덮어야 그래프에서 답변판까지 건너간다. -->
+    <!-- 층을 둘로 나눈다. 질의응답의 청소(qaFlyClear)가 생성 중 날아가는
+         조각까지 지워 버리면 안 된다. -->
+    <div class="sg-fly" id="ingFly" aria-hidden="true"></div>
     <div class="sg-fly" id="qaFly" aria-hidden="true"></div>
   </div>
 </section>

@@ -246,6 +246,133 @@
     for (var i = 0; i < lis.length; i++) lis[i].classList.toggle('is-on', i < k);
   }
 
+  /* ── 문서가 온톨로지가 되는 한 줄기 ──
+     예전에는 왼쪽에서 종이가 흘러가고 오른쪽에서 그래프가 자라는 두 장면이
+     서로 무관하게 돌았다. 시트는 자기 칸 오른쪽 끝(88%)에서 옅어져 사라지고,
+     거기서 끝이었다 — 무엇이 무엇이 되는지 화면이 말해 주지 않았다.
+
+     그 사라지던 자리에서 이어받는다. 지금 켜져 있는 단계(TBox·RBox·ABox)를
+     한 번 거쳐, 방금 만들어진 노드 자리로 들어간다. 도착하면 그 자리에
+     고리가 한 번 퍼진다. 그래서 종이 한 장 → 단계 → 노드 하나가 한 줄기로 읽힌다.
+
+     생성 순서의 역표. graph.js 는 노드마다 순위를 주지만, 우리는 "지금 순위
+     n 인 노드가 누구인가" 를 알아야 한다. */
+  var ingOrder = null;
+  function ingOrderOf() {
+    if (ingOrder) return ingOrder;
+    var rank = G && G.buildRank;
+    if (!rank) return null;
+    ingOrder = new Array(rank.length);
+    for (var i = 0; i < rank.length; i++) ingOrder[rank[i]] = i;
+    return ingOrder;
+  }
+
+  var ingFlyT = 0;
+
+  function ingFlyOne(cut) {
+    var fly = el('ingFly'), left = document.querySelector('.ing-left');
+    if (!fly || !left || reduced) return;
+
+    var lb = left.getBoundingClientRect();
+    var vh = window.innerHeight || 800;
+    /* 문서 칸이 화면에 없으면 보낼 이유가 없다 */
+    if (lb.bottom < 40 || lb.top > vh - 40) return;
+
+    var fb = fly.getBoundingClientRect();
+    /* 출발 — 시트가 옅어지며 사라지던 그 자리(칸 오른쪽 88%) */
+    var x0 = lb.left - fb.left + lb.width * 0.88;
+    var y0 = lb.top - fb.top + lb.height * (0.3 + Math.random() * 0.4);
+
+    /* 좁은 화면에서 그래프는 위쪽에 붙은 띠다. 비행층(z 12)이 띠(z 8)보다
+       위이므로, 띠 뒤에 있는 문서 칸에서 출발하면 조각이 그래프 한가운데에서
+       난데없이 튀어나온 것처럼 보인다. 그런 때는 보내지 않는다 —
+       출발이 보이지 않는 비행은 무엇이 무엇이 되는지 말해 주지 못한다. */
+    var band = document.querySelector('.stage-graph');
+    if (band && band.parentNode) {
+      var bb = band.getBoundingClientRect();
+      var wrapW = band.parentNode.getBoundingClientRect().width;
+      var strip = wrapW && bb.width > wrapW * 0.8;
+      if (strip && lb.top - fb.top < bb.bottom - fb.top) return;
+    }
+
+    /* 경유 — 지금 켜져 있는 단계 */
+    var on = document.querySelector('.pipe-st.is-on:not(.is-past)') ||
+             document.querySelector('.pipe-st.is-on');
+    var x1 = x0, y1 = y0;
+    if (on) {
+      var ob = on.getBoundingClientRect();
+      x1 = ob.left - fb.left + ob.width * 0.5;
+      y1 = ob.top - fb.top + ob.height * 0.5;
+    }
+
+    /* 도착 — 방금 만들어진 노드. 아직 노드가 없으면(스키마 단계) 단계에서 끝난다. */
+    var x2 = null, y2 = null;
+    var ord = ingOrderOf(), canvas = el('oneGraph');
+    if (ord && canvas && G && cut > 0) {
+      var idx = ord[Math.max(0, Math.min(ord.length - 1, cut - 1))];
+      var pt = G.screenPos(idx);
+      if (pt) {
+        var cb = canvas.getBoundingClientRect();
+        x2 = cb.left - fb.left + pt.x;
+        y2 = cb.top - fb.top + pt.y;
+      }
+    }
+
+    var chip = document.createElement('span');
+    chip.className = 'ing-chip';
+    chip.style.left = x0 + 'px';
+    chip.style.top = y0 + 'px';
+    fly.appendChild(chip);
+    void chip.offsetWidth;
+
+    function drop(n) { if (n && n.parentNode) n.parentNode.removeChild(n); }
+
+    /* 1구간 — 단계로 */
+    chip.classList.add('is-go');
+    chip.style.transform = 'translate(' + (x1 - x0) + 'px,' + (y1 - y0) + 'px) scale(.72)';
+
+    setTimeout(function () {
+      if (x2 === null) {
+        chip.classList.add('is-end');
+        setTimeout(function () { drop(chip); }, 420);
+        return;
+      }
+      /* 2구간 — 노드로. 지나온 길을 실로 한 번 긋는다. */
+      var dx = x2 - x1, dy = y2 - y1;
+      var len = Math.sqrt(dx * dx + dy * dy);
+      var wire = document.createElement('span');
+      wire.className = 'ing-wire';
+      wire.style.left = x1 + 'px';
+      wire.style.top = y1 + 'px';
+      wire.style.width = len + 'px';
+      wire.style.transform = 'rotate(' + (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(2) + 'deg) scaleX(0)';
+      fly.appendChild(wire);
+      void wire.offsetWidth;
+      wire.classList.add('is-on');
+      wire.style.transform = 'rotate(' + (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(2) + 'deg) scaleX(1)';
+
+      chip.style.transform = 'translate(' + (x2 - x0) + 'px,' + (y2 - y0) + 'px) scale(.3)';
+
+      setTimeout(function () {
+        /* 도착한 자리에 고리 하나 — 여기서 노드가 되었다는 표시 */
+        var ring = document.createElement('span');
+        ring.className = 'ing-ring';
+        ring.style.left = x2 + 'px';
+        ring.style.top = y2 + 'px';
+        fly.appendChild(ring);
+        chip.classList.add('is-end');
+        wire.classList.add('is-off');
+        setTimeout(function () { drop(chip); drop(wire); drop(ring); }, 900);
+      }, 620);
+    }, 520);
+  }
+
+  /* 층을 비운다 — 다시 만들기를 누르거나 파트를 벗어날 때 */
+  function ingFlyClear() {
+    var fly = el('ingFly');
+    if (fly) while (fly.firstChild) fly.removeChild(fly.firstChild);
+  }
+
   function ingStep() {
     var p = Math.min(1, (Date.now() - ingT0) / ingDur);
     var sts = ingStages();
@@ -266,6 +393,14 @@
       ingPaintCount(ingBuiltN, ingBuiltE);
       ingPaintStageA();
     }
+    /* 시트는 1.1초 간격으로 한 장씩 도착한다(--d 0.0/1.1/2.2/3.3). 같은
+       박자로 한 줄기씩 보낸다. 스키마 단계(p<=0.20)에서는 단계까지만 간다. */
+    var now2 = Date.now();
+    if (p > 0.02 && p < 1 && now2 - ingFlyT > 1100) {
+      ingFlyT = now2;
+      ingFlyOne(ingBuiltN);
+    }
+
     if (p < 1) { ingTimer = setTimeout(ingStep, reduced ? 400 : 90); }
     else { ingTimer = null; ingDone = true; ingDoneNow(); }
   }
@@ -325,6 +460,7 @@
     ontologyReady = false;
     if (typeof stageEnable === 'function') stageEnable();
     ingBuiltN = 0; ingBuiltE = 0;
+    ingFlyClear();
     if (G) { G.clearFocus(); G.setBuild(0); }
     ingPaintCount(0, 0);
     ingPaintStageA();
@@ -834,6 +970,13 @@
   /* 스크롤 → 어느 문항을 보고 있는지 */
   function qaSync() {
     if (!qaPages.length || !ontologyReady) return;
+    /* 03 에 와 있을 때만 돈다.
+       예전에는 이 검사가 없었다. qaSync 는 스크롤마다 불리고 고르는 값이
+       기본 0 이므로, 온톨로지가 다 만들어지는 순간 어디에 있든 1번 문항이
+       시작됐다 — 01 을 보고 있는데 그래프에서 답변판으로 선이 그어지고
+       질문이 타이핑됐다. 실측 로그에도 build 파트에서 qa=[running,idle,idle]
+       로 찍혀 있었다. */
+    if (STATE !== 'qa') return;
     var mid = decideLine();
     var pick = 0;
     for (var i = 0; i < qaPages.length; i++) {
@@ -1164,6 +1307,60 @@
     /* 서체가 늦게 오면 줄 수가 바뀐다 */
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
     register(measure);
+  }());
+
+
+  /* ═══ 진단 화면 (?debug=1) ════════════════════════════════════════
+     실기기에서만 나는 문제를 손에 들고 확인하기 위한 것이다. 주소 끝에
+     ?debug=1 을 붙이면 왼쪽 아래에 지금 상태가 뜬다. 평소에는 아무것도
+     만들지 않는다. */
+  (function debugPanel() {
+    if (!/(^|[?&])debug=1(&|$)/.test(searchStr())) return;
+    var box = document.createElement('div');
+    box.setAttribute('style',
+      'position:fixed;left:6px;bottom:6px;z-index:9999;max-width:70vw;' +
+      'font:11px/1.45 ui-monospace,monospace;white-space:pre;' +
+      'background:rgba(0,0,0,.82);color:#9fe;padding:7px 9px;border-radius:3px;' +
+      'pointer-events:none');
+    document.body.appendChild(box);
+
+    var frames = 0, fps = 0, t0 = Date.now(), tap = '-';
+    (function count() { frames++; requestAnimationFrame(count); }());
+
+    var one = el('oneGraph');
+    if (one) {
+      one.addEventListener('pointerup', function (e) {
+        tap = 'up ' + e.pointerType + ' ' + Math.round(e.clientX) + ',' + Math.round(e.clientY);
+      });
+      one.addEventListener('touchend', function () { tap += ' +touchend'; }, { passive: true });
+      one.addEventListener('click', function () { tap += ' +click'; });
+    }
+
+    function line() {
+      var now = Date.now();
+      if (now - t0 >= 1000) { fps = Math.round(frames * 1000 / (now - t0)); frames = 0; t0 = now; }
+      var g = document.querySelector('.stage-graph');
+      var gb = g ? g.getBoundingClientRect() : null;
+      var cs = g ? getComputedStyle(g) : null;
+      var read = el('exRead');
+      var coarse = false;
+      try { coarse = matchMedia('(pointer: coarse)').matches; } catch (e) {}
+      /* 줄바꿈은 배열로 잇는다 — 소스에 이스케이프를 쓰다가 문자열 안에
+         진짜 줄바꿈이 들어가 app.js 가 통째로 죽은 적이 있다. */
+      box.textContent = [
+        'STATE ' + (STATE || '-') + '  준비 ' + ontologyReady + '  fps ' + fps,
+        '화면 ' + innerWidth + 'x' + innerHeight +
+          '  dpr ' + (devicePixelRatio || 1) + '  coarse ' + coarse,
+        '띄 ' + (cs ? cs.position : '-') + ' top:' + (cs ? cs.top : '-') +
+          ' ' + (gb ? Math.round(gb.top) + '..' + Math.round(gb.bottom) : '-'),
+        '캔버스 ' + (one ? one.width + 'x' + one.height : '-') +
+          '  노드 ' + ingBuiltN,
+        '판독 ' + (read ? (read.querySelector('.ex-empty') ? '빈판' : '켜짐') : '-') +
+          '  탭 ' + tap
+      ].join(String.fromCharCode(10));
+      requestAnimationFrame(line);
+    }
+    line();
   }());
 
 

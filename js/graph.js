@@ -107,6 +107,15 @@
     /* 3D 는 원근 때문에 2D 보다 넓게 퍼진다 — 그만큼 줄여 화면에 담는다. */
     var S3 = 0.92;
 
+    /* 손가락 기기인가. 여기서 프레임 값과 화소 배율을 나눈다.
+       핸드폰에서 484 노드 · 832 엣지를 매 프레임 다시 그리면 메인 스레드가
+       포화되어, 고정 띠가 스크롤을 못 따라오고 탭도 늦게 처리된다.
+       실기기에서 "스크롤해도 그래프가 안 따라옴" 이 나온 이유로 짚었다. */
+    var COARSE = (function () {
+      try { return global.matchMedia('(pointer: coarse)').matches; }
+      catch (e) { return false; }
+    }());
+
     var view = { s: 1, cx: 0, cy: 0, w: 0, h: 0, R: 1 };
     var t0 = null, raf = null, running = false, rot = 0;
     var hover = -1, hoverEdges = null, hoverNodes = null;
@@ -170,7 +179,10 @@
               w: cr.width + 10, h: cr.height + 8 }
           : null;
       }
-      var dpr = Math.min(global.devicePixelRatio || 1, 2);
+      /* 핸드폰은 화소비가 3 인 것이 흔하다. 2 로 잘라도 333x332 캔버스가
+         666x664 = 44만 화소다. 1.5 면 25만으로 절반 아래다 — 글자가 조금
+         부드러워지는 대신 스크롤이 살아난다. */
+      var dpr = Math.min(global.devicePixelRatio || 1, COARSE ? 1.5 : 2);
       canvas.width  = Math.round(box.width * dpr);
       canvas.height = Math.round(box.height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -252,10 +264,20 @@
        예전에는 draw() 마지막 줄에서만 다음 프레임을 요청했기 때문에, 중간에
        한 번 던지면 그래프가 그 자리에서 영구히 멈췄다. 그림 하나 깨지는 것과
        화면이 죽는 것은 무게가 다르다. */
+    /* 프레임을 아낀다. 회전은 아주 느리므로(21초에 한 바퀴) 30 프레임이면
+       눈에 같고, 스크롤 중에는 15 로 더 내린다 — 그동안 남는 시간이
+       고정 띠와 탭 처리로 간다. 커서 기기에서는 그대로 60 이다. */
+    var lastDraw = 0, scrollUntil = 0;
+
     function draw() {
-      try { drawFrame(); }
-      catch (err) {
-        if (global.console && console.warn) console.warn('graph draw:', err);
+      var now = Date.now();
+      var gap = COARSE ? (now < scrollUntil ? 66 : 33) : 0;
+      if (now - lastDraw >= gap) {
+        lastDraw = now;
+        try { drawFrame(); }
+        catch (err) {
+          if (global.console && console.warn) console.warn('graph draw:', err);
+        }
       }
       raf = running ? global.requestAnimationFrame(draw) : null;
     }
@@ -637,19 +659,56 @@
       });
       /* 손가락으로 고른 것은 손을 떼도 남는다 — 다음 탭까지 읽을 시간을 준다 */
       canvas.addEventListener('pointerleave', function () { if (!coarse) setHover(-1); });
+
+      /* 손가락 탭은 click 을 기다리지 않는다.
+         실기기(크롬·사파리)에서 "노드를 눌러도 반응 없음" 이 나왔다. 캔버스처럼
+         원래 누를 수 없는 요소 위에서는 click 이 오지 않거나 늦게 오고, 탭 중에
+         손가락이 몇 px 만 움직여도 브라우저가 스크롤로 보고 click 을 삼킨다.
+         헤드리스에서는 합성 click 을 직접 보냈으므로 이 차이가 드러나지 않았다.
+         pointerup 에서 직접 처리한다 — 누른 자리에서 12px 안쪽이면 탭이다. */
+      var downX = 0, downY = 0, downT = 0, handled = 0;
+
+      function tapAt(cx, cy) {
+        var b = canvas.getBoundingClientRect();
+        setHover(pick(cx - b.left, cy - b.top, 28));
+        if (hover >= 0 && opts.onSelect) opts.onSelect(info(hover));
+      }
+
+      canvas.addEventListener('pointerdown', function (ev) {
+        downX = ev.clientX; downY = ev.clientY; downT = Date.now();
+      });
+      canvas.addEventListener('pointerup', function (ev) {
+        if (ev.pointerType !== 'touch' && ev.pointerType !== 'pen') return;
+        var dx = ev.clientX - downX, dy = ev.clientY - downY;
+        if (dx * dx + dy * dy > 144) return;      /* 끌었다 — 스크롤이다 */
+        if (Date.now() - downT > 700) return;      /* 길게 눌렀다 */
+        handled = Date.now();
+        tapAt(ev.clientX, ev.clientY);
+      });
+      /* 포인터 이벤트가 없는 옛 웹킷용. pointerup 이 처리했으면 건너뛴다. */
+      canvas.addEventListener('touchend', function (ev) {
+        if (Date.now() - handled < 700) return;
+        var t = ev.changedTouches && ev.changedTouches[0];
+        if (!t) return;
+        var dx2 = t.clientX - downX, dy2 = t.clientY - downY;
+        if (downT && dx2 * dx2 + dy2 * dy2 > 144) return;
+        coarse = true;
+        tapAt(t.clientX, t.clientY);
+      }, { passive: true });
+      canvas.addEventListener('touchstart', function (ev) {
+        var t = ev.touches && ev.touches[0];
+        if (!t) return;
+        coarse = true; downX = t.clientX; downY = t.clientY; downT = Date.now();
+      }, { passive: true });
+
       canvas.addEventListener('click', function (ev) {
-        if (coarse) {
-          /* pointerleave 가 이미 지나갔으므로 좌표로 다시 집는다.
-             빈 곳을 탭하면 -1 이 되어 판독이 닫힌다 — 닫는 방법이 있어야 한다. */
-          var b = canvas.getBoundingClientRect();
-          setHover(pick(ev.clientX - b.left, ev.clientY - b.top, 28));
-        }
+        if (coarse) return;      /* 손가락은 pointerup 이 이미 처리했다 */
         if (hover >= 0 && opts.onSelect) opts.onSelect(info(hover));
       });
     }
 
     /* 화면 밖으로 나가면 멈춘다. 배터리를 쓸 이유가 없다. */
-    function start() { if (!running) { running = true; kick(); } }
+    function start() { if (!running) { running = true; lastDraw = 0; kick(); } }
     function stop()  { running = false; if (raf) { global.cancelAnimationFrame(raf); raf = null; } }
 
     resize();
@@ -682,6 +741,7 @@
     }
     var vq = false;
     function onScrollView() {
+      scrollUntil = Date.now() + 180;   /* 스크롤이 멎고 0.18초 뒤 원래 값으로 */
       if (vq) return;
       vq = true;
       global.requestAnimationFrame(function () { vq = false; inView(); });

@@ -1493,7 +1493,13 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 .sg-replay:hover, .sg-replay.is-ready { color: var(--accent-deep); border-color: var(--accent-line); }
 
 .sg-stage { position: relative; min-height: 0; }
-.sg-canvas { display: block; width: 100%; height: 100%; }
+.sg-canvas {
+  display: block; width: 100%; height: 100%;
+  /* 더블탭 확대를 끄면 탭이 300ms 늦게 오지 않는다. 세로 스크롤은 살려 둔다 —
+     캔버스가 화면을 덮고 있으므로 여기서 스크롤을 막으면 페이지가 잠긴다. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 .sg-count {
   position: absolute; right: 13px; bottom: 11px; margin: 0;
   font-family: var(--mono); font-size: 12.5px; color: var(--dim);
@@ -1531,6 +1537,55 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 }
 .part-lede strong { color: var(--text); }
 
+
+/* ── 문서 → 단계 → 노드 로 건너가는 조각 ──
+   시트가 옅어지며 사라지던 자리에서 이어받는다. 같은 층(.sg-fly)을 쓰므로
+   문서 칸과 그래프 칸을 함께 덮는다 — 가로 배치(옆 칸)든 세로 배치(위쪽 띠)든
+   좌표 계산은 같다. */
+.ing-chip {
+  position: absolute; width: 13px; height: 17px; margin: -8px 0 0 -6px;
+  border-radius: 1px;
+  background: linear-gradient(160deg, var(--accent-deep), var(--accent));
+  box-shadow: 0 2px 10px rgba(106, 180, 255, .5);
+  opacity: 0;
+}
+.ing-chip.is-go {
+  opacity: 1;
+  transition: transform .6s cubic-bezier(.4, 0, .2, 1), opacity .3s ease;
+}
+.ing-chip.is-end { opacity: 0; }
+
+/* 조각이 지나간 길 */
+.ing-wire {
+  position: absolute; height: 1px; transform-origin: 0 50%;
+  /* 도착 쪽만 보이게 한다. 전 구간을 균일하게 그리면 글자 위를 가로지르는
+     가느다란 줄이 되어 긁힌 자국처럼 읽힌다 — 모바일에서는 단계 칸부터
+     그래프 띠까지가 화면을 세로로 관통했다. */
+  background: linear-gradient(90deg,
+    rgba(106, 180, 255, 0) 0%,
+    rgba(106, 180, 255, 0) 52%,
+    rgba(106, 180, 255, .35) 76%,
+    rgba(166, 212, 255, .9) 100%);
+  opacity: .9;
+}
+.ing-wire.is-on { transition: transform .6s cubic-bezier(.4, 0, .2, 1); }
+.ing-wire.is-off { opacity: 0; transition: opacity .55s ease; }
+
+/* 도착한 자리 — 여기서 노드가 되었다 */
+.ing-ring {
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border: 1.5px solid var(--accent-deep); border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ing-ring { animation: ingRing .9s ease-out 1; }
+}
+@keyframes ingRing {
+  0%   { transform: scale(.4); opacity: 1; }
+  100% { transform: scale(3.4); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ing-chip.is-go, .ing-wire.is-on { transition: none; }
+}
 
 /* ═══ 가로로 누운 핸드폰 ════════════════════════════════════════════
    세로는 높이가 없고 가로는 폭이 있다. 그래서 세로에서는 그래프를 위쪽
