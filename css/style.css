@@ -114,6 +114,13 @@
      글자를 키웠으므로 폭도 같이 넓힌다. */
   --measure: 46em;
   --label:   150px;   /* 섹션 제목이 서는 왼쪽 거터 */
+
+  /* 상단 바 높이. 고정 그래프 띠와 앵커 스크롤이 이 값에 붙는다.
+     좁은 화면에서 바가 두 줄이 되면 56 → 92 로 커지는데, 예전에는 띠가
+     56 에 못박혀 있어 조작 줄이 바 뒤로 숨었다(실측 상단바 91px).
+     app.js 가 실제 높이를 재서 이 값을 덮는다 — 언어·서체에 따라 달라지므로
+     CSS 값은 그것이 오기 전까지 쓰는 기본값이다. */
+  --top-h: 56px;
   --pad:     clamp(20px, 3.4vw, 56px);
 
   /* 섹션 사이의 간격 — 여백이 구획이다 */
@@ -124,7 +131,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top-h) + 16px); }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 body {
@@ -258,7 +265,7 @@ code {
    섹션 이동이 그 아래 한 줄. 한 줄에 밀어 넣고 옆으로 스크롤시키면
    뒤쪽 링크가 있는 줄도 모른다. */
 @media (max-width: 780px) {
-  html { scroll-padding-top: 96px; }
+  :root { --top-h: 92px; }   /* 두 줄. app.js 가 실측으로 덮는다 */
   .topbar-in { height: auto; flex-wrap: wrap; row-gap: 4px; padding-block: 9px; }
   .brand { flex: 0 1 auto; min-width: 0; }
   .lang-toggle { margin-left: auto; }
@@ -268,7 +275,21 @@ code {
     /* 옆으로 스크롤될 때 끝이 잘린 것을 알 수 있도록 오른쪽을 흐린다 */
     mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
   }
-  .nav a { padding: 6px 9px; }
+  /* 손가락으로 누르는 것은 40px 아래로 내려가지 않게 한다 —
+     실측에서 섹션 링크 35px · 언어 전환 31px 이었다. */
+  .nav a {
+    display: inline-flex; align-items: center;
+    padding: 0 10px; min-height: 40px;
+  }
+  .lang-toggle { min-height: 40px; padding: 0 13px; }
+  .brand { min-height: 40px; align-items: center; }
+}
+
+/* 누를 자리를 넉넉히 둔다. 커서가 없는 기기와 좁은 화면 둘 다에 건다 —
+   (hover:none) 만으로는 폭 기준 점검에서 확인할 수 없다. */
+@media (hover: none), (max-width: 780px) {
+  .sg-replay { min-height: 38px; }
+  .foot-back { display: inline-flex; align-items: center; min-height: 40px; }
 }
 
 
@@ -898,8 +919,17 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
   overflow: hidden;
 }
 @media (max-width: 860px) {
-  /* 좁은 화면에서는 문서 칸을 줄이고 그래프를 살린다 */
-  .ing { grid-template-columns: minmax(0, .85fr) minmax(150px, 1fr); height: 290px; }
+  /* 위아래로 쌓는다 — 문서가 흘러오는 칸이 위, 단계가 아래.
+     높이는 내용만큼. 못박아 두면 목록이 잘린다(실측 62px 칸에 68px 목록). */
+  .ing {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 250px auto;
+    height: auto;
+  }
+  /* 시트가 ±70px 까지 오르내린다. 240px 에서도 5px 잘렸다. */
+  .ing-left { height: 250px; }
+  /* 나머지 손질은 파일 끝 "좁은 화면" 덩어리에 모아 두었다 — 기본 규칙이
+     이 자리보다 뒤에 있어서, 여기 적으면 순서에 밀린다. */
 }
 
 /* ── 왼쪽 · 흘러오는 시트 ── */
@@ -1026,6 +1056,15 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 #stAList li { grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; opacity: 1; transform: none; }
 #stAList .pi-k { font-size: 12px; color: var(--dim); }
 #stAList .pi-v { font-size: 17px; font-weight: 700; color: var(--accent-deep); }
+/* 10.5px 은 핸드폰에서 너무 작다. 이 규칙은 .pi-* 정의보다 뒤에 와야
+   덮인다 — 앞에 두면 같은 특이도라 나중 규칙에 밀린다. */
+@media (max-width: 860px) {
+  .pipe-items .pi-a, .pipe-items .pi-b, .pipe-items .pi-p { font-size: 11px; }
+  /* 클래스 이름은 최대 191px 이다. 두 열(148px)에서는 잘려 나가므로 한 열.
+     술어는 139px 이라 두 열에 온전히 들어가므로 #stRList 는 그대로 둔다. */
+  #stTList { grid-template-columns: minmax(0, 1fr); }
+  .pipe-h em { font-size: 12px; }
+}
 
 /* ── 오른쪽 · 자라나는 온톨로지 ── */
 
@@ -1075,7 +1114,7 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 /* 좁은 화면의 .ing 열 규격을 그대로 따라간다. 이 규칙이 위쪽 미디어쿼리보다
    뒤에 와야 덮인다 — 순서가 바뀌면 캡션 밑줄이 다시 어긋난다. */
 @media (max-width: 860px) {
-  .ing-cap { grid-template-columns: minmax(0, .85fr) minmax(150px, 1fr); }
+  .ing-cap { grid-template-columns: minmax(0, 1fr); gap: 3px 0; }
 }
 
 .f3-hand {
@@ -1103,7 +1142,7 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 }
 .ex-side { display: grid; gap: 14px; align-content: start; }
 @media (min-width: 1080px) {
-  .ex-side { position: sticky; top: 74px; }
+  .ex-side { position: sticky; top: calc(var(--top-h) + 18px); }
 }
 .ex-read {
   border: 1px solid var(--line); border-radius: 3px;
@@ -1230,6 +1269,19 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
 .qa2-page.is-cur { opacity: 1; }
 @media (min-width: 1080px) {
   .qa2-page { min-height: 74vh; }
+}
+/* 좁은 화면 — 한 문항이 206px 밖에 안 되면 질문을 쓰는 동안 이미 다음
+   문항으로 넘어간다. 그렇다고 58vh 를 주면 내용 아래로 200px 넘는 빈 자리가
+   남아, 띠 아래가 텅 빈 것처럼 보였다. 띠 아래에 실제로 보이는 만큼으로
+   맞춘다 — 한 화면에 한 문항. 내용이 더 길면 알아서 늘어난다. */
+@media (max-width: 1079px) {
+  .qa2-page { min-height: calc(100vh - var(--top-h) - min(42vh, 330px) - 26px); }
+  .qa2-page { min-height: calc(100svh - var(--top-h) - min(46svh, 330px) - 26px); }
+  .qa2-pages { gap: 30px; }
+  /* 02 도 한 화면은 되어야 한다. 판독판 높이만큼(450px)만 두면 손가락 한 번에
+     지나가 버려서, 노드를 누를 짬도 없이 03 으로 넘어간다. */
+  .part { min-height: calc(100vh - var(--top-h) - min(42vh, 330px) - 26px); }
+  .part { min-height: calc(100svh - var(--top-h) - min(46svh, 330px) - 26px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .qa2-page { opacity: 1; transition: none; }
@@ -1370,8 +1422,8 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
   .stage-in { grid-template-columns: minmax(0, 1fr) minmax(420px, 46%); }
   .stage-graph {
     grid-column: 2; grid-row: 1;
-    position: sticky; top: 72px;
-    height: calc(100vh - 104px);
+    position: sticky; top: calc(var(--top-h) + 16px);
+    height: calc(100vh - var(--top-h) - 48px);
     display: grid; grid-template-rows: auto 1fr;
     border: 1px solid var(--line); border-radius: 3px;
     background: var(--surface); overflow: hidden;
@@ -1383,12 +1435,22 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
   /* 좁은 화면 — 그래프를 위쪽 띠로 붙이고 내용이 그 아래로 흐른다.
      상단 바(56px) 밑에 붙여 두 층이 겹치지 않게 한다. */
   .stage-graph {
-    position: sticky; top: 56px; z-index: 8;
-    height: min(46vh, 380px);
+    position: sticky; top: var(--top-h); z-index: 8;
+    /* 46vh(380px) 는 844px 화면에서 상단 바까지 합쳐 471px 을 먹어 내용
+       자리가 373px 밖에 남지 않았다. 42vh · 상한 330 으로 줄인다.
+       두 줄을 쓴다 — svh 를 모르는 브라우저는 첫 줄을 쓴다. */
+    height: min(42vh, 330px);
+    height: min(46svh, 330px);
     display: grid; grid-template-rows: auto 1fr;
     border: 1px solid var(--line); border-radius: 3px;
     background: var(--surface); overflow: hidden;
     box-shadow: 0 10px 26px rgba(0, 0, 0, .45);
+  }
+  /* 낮은 화면(가로로 눕힌 폰 · 작은 구형 기기)에서는 띠를 더 줄인다.
+     그러지 않으면 띠와 상단 바만 남고 읽을 자리가 없다. */
+  @media (max-height: 680px) {
+    .stage-graph { height: min(38vh, 240px); }
+    .stage-graph { height: min(40svh, 240px); }
   }
 }
 
@@ -1468,3 +1530,66 @@ html.parts #qa > .sec-in > *:not(.sec-label) { transform: none; }
   font-size: 16px; line-height: 1.78; color: var(--body);
 }
 .part-lede strong { color: var(--text); }
+
+
+/* ═══ 가로로 누운 핸드폰 ════════════════════════════════════════════
+   세로는 높이가 없고 가로는 폭이 있다. 그래서 세로에서는 그래프를 위쪽
+   띠로 붙이지만, 가로에서는 넓은 화면처럼 오른쪽 칸으로 세운다 —
+   844×390 에서 위쪽 띠로 두면 상단 바 57 + 띠 148 을 뺀 137px 만 남는다.
+
+   조건: 눕혀져 있고(landscape) 낮고(≤600px) 그래도 두 칸이 될 만큼은
+   넓을 때(≥620px). 작은 구형 기기를 더 눕힌 경우는 그대로 띠로 둔다.
+   ═══════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 600px) and (min-width: 620px) {
+  .stage-in { grid-template-columns: minmax(0, 1fr) minmax(280px, 44%); }
+  .stage-graph {
+    grid-column: 2; grid-row: 1;
+    position: sticky; top: calc(var(--top-h) + 10px);
+    height: calc(100vh - var(--top-h) - 22px);
+    height: calc(100svh - var(--top-h) - 22px);
+    display: grid; grid-template-rows: auto 1fr;
+    border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface); overflow: hidden;
+    box-shadow: none;   /* 옆 칸이므로 떠 있는 띠가 아니다 */
+  }
+  .stage-flow { grid-column: 1; grid-row: 1; }
+  /* 세로에서 한 화면씩 주던 자리는 가로에서 너무 크다 */
+  .qa2-page { min-height: 0; }
+  .qa2-pages { gap: 40px; }
+  .part { min-height: 0; }
+
+  /* 상단 바를 한 줄로 되돌린다. 620~780px 구간은 두 줄이 되는데, 눕힌
+     화면에서 105px 은 360px 높이의 29% 다. 세로에서 두 줄로 바꾼 이유
+     (뒤쪽 링크가 있는 줄도 모른다)는 높이가 남을 때의 이야기다.
+     한 줄로 밀어 넣고 섹션 링크만 옆으로 스크롤시킨다. */
+  .topbar-in { height: 56px; flex-wrap: nowrap; row-gap: 0; padding-block: 0; }
+  .nav { order: 0; flex: 0 1 auto; margin-left: auto; padding-bottom: 0; }
+  .lang-toggle { margin-left: 4px; }
+  .nav a { min-height: 34px; }
+}
+
+/* ═══ 좁은 화면 손질 ════════════════════════════════════════════════
+   순서에 지지 않도록 파일 끝에 모았다. 여기 적힌 것은 모두 실측에서
+   나온 것이다 — 잘린 목록, 잘린 이름, 40px 아래로 내려간 탭 타깃,
+   핸드폰에서 읽기 힘든 11px 글자.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 860px) {
+  /* 01 무대 — 위아래로 쌓았으므로 칸 테두리도 가로선으로 바꾼다.
+     단계 높이는 내용만큼. auto 로 두면 가장 큰 단계에 셋 다 맞춰진다
+     (실측 213px × 3 = 643px, min-content 로 두면 약 450px). */
+  .ing-pipe {
+    border-inline: 0; border-top: 1px solid var(--line);
+    grid-template-rows: min-content min-content min-content;
+  }
+  .pipe-items { overflow: visible; }
+  /* 캡션도 한 열 — 무대가 쌓였으므로 위에서 아래로 읽는 순서가 그대로 맞는다 */
+  .ing-cap { grid-template-columns: minmax(0, 1fr); gap: 3px 0; }
+
+  /* 11px 은 손에 들고 보기에 작다 */
+  .sg-dim button em, .qa2-who span, .qa2-no { font-size: 12px; }
+}
+
+@media (hover: none), (max-width: 780px) {
+  /* 누를 자리 — 실측에서 38px 이었다 */
+  .sg-replay { min-height: 40px; }
+}

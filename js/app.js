@@ -57,6 +57,46 @@
   /* 여러 곳에서 다시 그려야 하는 렌더러를 모아 둔다 */
   var renderers = [];
   function register(fn) { renderers.push(fn); fn(); }
+
+  /* 스크롤에 붙는다. rAF 로 묶지 않는다 — 콜백이 한 번 오지 않으면 플래그가
+     선 채로 남아 그 시스템이 스크롤에 영구히 반응하지 않는다. 여기서 하는 일은
+     rect 몇 번 읽고 클래스를 토글하는 정도이고, 스크롤 이벤트도 프레임마다
+     한 번꼴로 오므로 그 자리에서 바로 한다. */
+  function onScroll(fn) {
+    window.addEventListener('scroll', fn, { passive: true });
+    window.addEventListener('resize', fn);
+    fn();
+  }
+
+  /* 무엇을 보고 있는지 판정하는 선.
+     좁은 화면에서는 그래프 띠가 화면 위쪽을 덮으므로, 그 아래로 내린다 —
+     그러지 않으면 띠에 가려 아직 안 보이는 파트가 '지금 보는 것'이 된다.
+     띠가 위쪽에 붙는 구간은 CSS 와 같은 1079px 경계로 판단한다. */
+  function decideLine() {
+    var vh = window.innerHeight || 800;
+    var mid = vh * 0.42;
+    var g = document.querySelector('.stage-graph');
+    if (!g || !g.parentNode) return mid;
+    var b = g.getBoundingClientRect();
+    var wrap = g.parentNode.getBoundingClientRect();
+    /* 그래프가 '위쪽 띠' 로 붙어 있는 배치인가. 화면 폭으로 판단하면 안 된다 —
+       누운 핸드폰은 폭이 좁아도 그래프가 오른쪽 칸이다. 폭이 좁다는 이유로
+       선을 내렸더니 390px 높이에서 선이 335px 에 놓여, 파트가 화면 거의
+       바닥에 닿아야 바뀌었다. 그래서 02 를 잠긴 채로 지나갔다.
+       띠인지 아닌지는 배치가 말해 준다 — 띠는 칸 폭을 거의 다 쓴다. */
+    if (!wrap.width || b.width < wrap.width * 0.8) return mid;
+    /* 아직 위에 붙지 않고 흘러 지나가는 중이면 그대로 둔다 */
+    if (b.top > vh * 0.3 || b.bottom <= mid) return mid;
+    return Math.min(b.bottom + 44, vh * 0.86);
+  }
+
+  /* 커서가 있는 기기인가. 핸드폰에는 없으므로 안내 문구를 바꿔야 한다 —
+     "커서를 올려 보세요" 는 손가락으로 보는 사람에게는 거짓말이다.
+     (hover: hover) 만으로는 일부 안드로이드가 참을 돌려주므로 pointer 도 본다. */
+  function fine() {
+    try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+    catch (e) { return true; }
+  }
   function renderAll() { renderers.forEach(function (fn) { fn(); }); }
 
   var reduced = window.matchMedia &&
@@ -186,6 +226,18 @@
   /* 01 의 생성 타이머. 상태 기계가 켜고 끈다. */
   var ingTimer = null, ingT0 = 0, ingDur = 11000;
 
+  /* 생성에 쓸 시간. 좁은 화면에서는 짧게 잡는다.
+     문서가 화면 높이에 비해 길어서(세로 390x844 에서 5,078px = 6 화면),
+     넓은 화면과 같은 11초를 쓰면 02 에 도착할 때까지 끝나지 않는다 —
+     실측으로 탐색 파트를 잠긴 채로 지나갔다. 7초면 자라는 것이 충분히
+     보이면서도 02 에 도착하기 전에 끝난다. */
+  function ingBaseDur() {
+    var narrow;
+    try { narrow = window.matchMedia('(max-width: 1079px)').matches; }
+    catch (e) { narrow = window.innerWidth < 1080; }
+    return narrow ? 7000 : 11000;
+  }
+
   function ingStages() { return [el('stT'), el('stR'), el('stA')]; }
 
   function ingOpen(host, frac) {
@@ -218,6 +270,25 @@
     else { ingTimer = null; ingDone = true; ingDoneNow(); }
   }
 
+  /* 01 을 지나 내려갔는데 아직 만들고 있을 때.
+     그대로 두면 02 와 03 이 여러 화면에 걸쳐 잠긴 채로 남고, 그래프 위에는
+     "잠시 후 사용할 수 있습니다" 가 계속 떠 있다 — 실측으로 390x844 에서
+     페이지 88% 까지 그 상태였다. 고장난 것처럼 보인다.
+
+     그렇다고 남은 것을 즉시 채우면 결과가 짠 하고 나타난다. 남은 진행을
+     2.2초에 나눠 준다 — 자라는 것이 보이면서도 기다림이 끝난다.
+     진행률이 튀지 않게, 지금 값을 유지하면서 전체 길이만 줄인다. */
+  function ingUrge() {
+    if (ingTimer === null || ingDone) return;
+    var el0 = Date.now() - ingT0;
+    var p = Math.min(1, el0 / ingDur);
+    if (p > 0.97) return;
+    var rest = reduced ? 200 : 2200;
+    var dur = rest / (1 - p);
+    ingDur = dur;
+    ingT0 = Date.now() - p * dur;
+  }
+
   function ingMark() {
     var btn = el('ingReplay');
     if (btn) btn.classList.toggle('is-ready', ingDone);
@@ -229,6 +300,7 @@
     var stage = el('ingStage');
     if (stage) stage.classList.add('is-on');
     if (ingTimer !== null || ingDone) return;
+    ingDur = ingBaseDur();
     ingT0 = Date.now();
     ingStep();
   }
@@ -264,6 +336,7 @@
       if (x) { x.classList.remove('is-on'); x.classList.remove('is-past'); }
     });
     ingMark();
+    ingDur = ingBaseDur();
     ingT0 = Date.now();
     ingStep();
   }
@@ -286,16 +359,23 @@
     function check() {
       var b = stage.getBoundingClientRect();
       var vh = window.innerHeight || 800;
-      if (b.top < vh * 1.6) { ingPlay(); }
+      /* 얼마나 앞에서 시작할지. 좁은 화면에서는 히어로가 1.5 화면이고 01 의
+         무대도 위아래로 쌓여 길어서, 한 화면 앞(1.6)에서 시작하면 도착이
+         너무 늦다 — 실측으로 페이지 60% 까지 그래프가 비어 있었다.
+         두 화면 반 앞에서 시작한다. 스크롤을 시작하면 곧 시작되는 셈이다. */
+      var narrow;
+      try { narrow = window.matchMedia('(max-width: 1079px)').matches; }
+      catch (e) { narrow = window.innerWidth < 1080; }
+      if (b.top < vh * (narrow ? 2.6 : 1.6)) { ingPlay(); }
     }
-    var q = false;
-    window.addEventListener('scroll', function () {
-      if (q) return;
-      q = true;
-      window.requestAnimationFrame(function () { q = false; check(); });
-    }, { passive: true });
+    window.addEventListener('scroll', check, { passive: true });
     window.addEventListener('resize', check);
-    check();
+    /* 첫 판단은 레이아웃이 끝난 뒤에 한다. 스크립트가 도는 시점에는 히어로
+       캔버스가 아직 자리를 잡지 않아 문서가 짧고, 무대가 화면 가까이에 있는
+       것처럼 보인다 — 그 상태로 판단하면 열자마자 시작된다. */
+    if (document.readyState === 'complete') check();
+    else window.addEventListener('load', check);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(check);
   }());
 
 
@@ -308,12 +388,20 @@
     var L = lang() === 'ko';
     return '<div class="ex-empty">' +
       '<span class="ex-kicker">' + (L ? '노드 판독' : 'Node readout') + '</span>' +
-      '<p class="ex-lead">' + (L
-        ? '오른쪽 그래프의 노드에 커서를 올리면<br>그 개체가 무엇이고 어떤 관계로 무엇에 매달려 있는지 여기에 나옵니다.'
-        : 'Hover a node in the graph to the right.<br>What the individual is, and exactly what it hangs off, appears here.') + '</p>' +
-      '<p class="ex-lead ex-lead--dim">' + (L
-        ? 'HVAC 설비 노드를 누르면 그 설비만 남기고 나머지를 눌러 둡니다.'
-        : 'Click an equipment node to keep it lit and press the rest back.') + '</p>' +
+      '<p class="ex-lead">' + (fine()
+        ? (L
+          ? '오른쪽 그래프의 노드에 커서를 올리면<br>그 개체가 무엇이고 어떤 관계로 무엇에 매달려 있는지 여기에 나옵니다.'
+          : 'Hover a node in the graph to the right.<br>What the individual is, and exactly what it hangs off, appears here.')
+        : (L
+          ? '위 그래프의 노드를 누르면<br>그 개체가 무엇이고 어떤 관계로 무엇에 매달려 있는지 여기에 나옵니다.'
+          : 'Tap a node in the graph above.<br>What the individual is, and exactly what it hangs off, appears here.')) + '</p>' +
+      '<p class="ex-lead ex-lead--dim">' + (fine()
+        ? (L
+          ? 'HVAC 설비 노드를 누르면 그 설비만 남기고 나머지를 눌러 둡니다.'
+          : 'Click an equipment node to keep it lit and press the rest back.')
+        : (L
+          ? '빈 곳을 누르면 판독을 닫습니다.'
+          : 'Tap an empty spot to close the readout.')) + '</p>' +
       '</div>';
   }
 
@@ -590,6 +678,12 @@
   /* 노드 하나를 슬롯으로 옮긴다. 어디서 뽑아오는지가 보여야 하므로
      고리 → 선 → 조각의 세 단계로 나눈다. 노드는 <canvas> 안에 있어 CSS 로
      움직일 수 없으므로, 화면 좌표에 DOM 조각을 겹쳐 놓고 옮긴다. */
+  /* 비행층을 비운다. 한 번에 한 문항만 날아가므로 통째로 지워도 된다. */
+  function qaFlyClear() {
+    var fly = el('qaFly');
+    if (fly) while (fly.firstChild) fly.removeChild(fly.firstChild);
+  }
+
   function qaFlyNode(nodeIdx, slotLi, label, color, later, done) {
     var fly = el('qaFly'), canvas = el('oneGraph');
     if (!fly || !canvas || !G || reduced) { done(); return; }
@@ -660,6 +754,8 @@
     var page = qaPages[i];
     if (!page) return;
     qaClearFor(i);
+    /* 타이머를 취소했으므로 조각을 지우는 일도 취소됐다. 여기서 치운다. */
+    qaFlyClear();
     page.dataset.state = 'idle';
     var q = page.querySelector('.qa2-q');
     if (q) { q.textContent = ''; q.classList.remove('is-typing'); }
@@ -738,7 +834,7 @@
   /* 스크롤 → 어느 문항을 보고 있는지 */
   function qaSync() {
     if (!qaPages.length || !ontologyReady) return;
-    var mid = (window.innerHeight || 800) * 0.42;
+    var mid = decideLine();
     var pick = 0;
     for (var i = 0; i < qaPages.length; i++) {
       if (qaPages[i].getBoundingClientRect().top <= mid) pick = i;
@@ -763,18 +859,13 @@
       if ((qaPages[i].dataset.state || 'idle') === 'running') qaReset(i);
       else qaClearFor(i);
     }
+    qaFlyClear();
     qaCur = -1;
     if (G) G.clearFocus();
   }
 
   (function qaScroll() {
-    var q = false;
-    window.addEventListener('scroll', function () {
-      if (q) return;
-      q = true;
-      window.requestAnimationFrame(function () { q = false; qaSync(); });
-    }, { passive: true });
-    window.addEventListener('resize', qaSync);
+    onScroll(qaSync);
   }());
 
 
@@ -840,7 +931,9 @@
 
     var LABEL = {
       build:   { ko: '온톨로지 생성 중',            en: 'building the ontology' },
-      explore: { ko: '탐색 · 커서를 올려 보세요',   en: 'explore · hover a node' },
+      explore: fine()
+        ? { ko: '탐색 · 커서를 올려 보세요', en: 'explore · hover a node' }
+        : { ko: '탐색 · 노드를 눌러 보세요', en: 'explore · tap a node' },
       qa:      { ko: '질의응답',                    en: 'question & answer' }
     };
     var WAIT = { ko: '온톨로지 생성 중 · 잠시 후 사용할 수 있습니다',
@@ -899,13 +992,17 @@
     function apply(next) {
       if (next === STATE) return;
       STATE = next;
-      /* 생성은 어느 파트에 있어도 계속 간다 — 무대가 화면에 있으면 시작한다. */
-      ingPlay();
+      /* 여기서 ingPlay() 를 부르지 않는다. 첫 프레임에 STATE 가 '' → 'build'
+         로 바뀌면서 조건 없이 시작되어, 핸드폰에서는 히어로를 보는 동안
+         보이지 않는 곳에서 다 만들어졌다. 시작 조건은 ingEarly() 한 곳에만
+         둔다 — 무대가 한 화면 앞까지 왔을 때. */
+      /* 01 을 지나쳤는데 아직 만들고 있으면 남은 것을 짧게 끝낸다 */
+      if (next !== 'build') ingUrge();
       stageEnable();
     }
 
     function frame() {
-      var mid = (window.innerHeight || 800) * 0.42;
+      var mid = decideLine();
       var pick = parts[0].id;
       for (var i = 0; i < parts.length; i++) {
         if (parts[i].getBoundingClientRect().top <= mid) pick = parts[i].id;
@@ -913,15 +1010,8 @@
       apply(pick);
     }
 
-    var q = false;
-    window.addEventListener('scroll', function () {
-      if (q) return;
-      q = true;
-      window.requestAnimationFrame(function () { q = false; frame(); });
-    }, { passive: true });
-    window.addEventListener('resize', frame);
     STATE = '';
-    frame();
+    onScroll(frame);
     stageEnable();
   }());
 
@@ -1049,15 +1139,31 @@
       bar.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(2) + '%';
     }
 
-    var queued = false;
-    window.addEventListener('scroll', function () {
-      if (queued) return;
-      queued = true;
-      window.requestAnimationFrame(function () { queued = false; frame(); });
-    }, { passive: true });
-    window.addEventListener('resize', frame);
-    frame();
+    onScroll(frame);
     root.classList.add('parts');
+  }());
+
+
+  /* ═══ 상단 바 높이 ════════════════════════════════════════════════
+     고정 그래프 띠(--top-h 에 붙는다)와 앵커 스크롤이 이 값을 쓴다.
+     좁은 화면에서 바가 두 줄이 되면 56 → 90 대로 커지는데, 예전에는 띠가
+     56px 에 못박혀 있어 띠의 조작 줄이 바 뒤로 숨었다.
+     언어를 바꾸면 글자 길이가 달라져 줄 수가 바뀌므로 register 로도 건다. */
+  (function topHeight() {
+    var bar = document.querySelector('.topbar');
+    if (!bar) return;
+    var last = -1;
+    function measure() {
+      var h = Math.round(bar.getBoundingClientRect().height);
+      if (!h || h === last) return;
+      last = h;
+      root.style.setProperty('--top-h', h + 'px');
+    }
+    if (window.ResizeObserver) new window.ResizeObserver(measure).observe(bar);
+    window.addEventListener('resize', measure);
+    /* 서체가 늦게 오면 줄 수가 바뀐다 */
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+    register(measure);
   }());
 
 

@@ -154,9 +154,22 @@
     var want3 = has3 && (opts.threeD === true);
     var morph = want3 ? 1 : 0;
 
+    /* 캔버스 위에 떠 있는 DOM 이 차지한 자리. 이름표는 여기를 피한다.
+       매 프레임 재지 않고 resize 에서 한 번 잡는다 — 위치가 CSS 로 못박혀 있다. */
+    var deadBox = null;
+
     function resize() {
       var box = canvas.getBoundingClientRect();
       if (!box.width || !box.height) return;
+
+      var cnt = canvas.parentNode && canvas.parentNode.querySelector('.sg-count');
+      if (cnt) {
+        var cr = cnt.getBoundingClientRect();
+        deadBox = cr.width
+          ? { x: cr.left - box.left - 5, y: cr.top - box.top - 4,
+              w: cr.width + 10, h: cr.height + 8 }
+          : null;
+      }
       var dpr = Math.min(global.devicePixelRatio || 1, 2);
       canvas.width  = Math.round(box.width * dpr);
       canvas.height = Math.round(box.height * dpr);
@@ -385,6 +398,8 @@
       if (!isHero && hoverNodes) {
         var FONT = ' "SF Pro Text", system-ui, -apple-system, sans-serif';
         var placed = [];
+        /* 노드 수 판독이 앉아 있는 자리를 먼저 차지해 둔다 */
+        if (deadBox) placed.push(deadBox);
 
         function free(x, y, w, h) {
           for (var i = 0; i < placed.length; i++) {
@@ -526,9 +541,13 @@
        고른다 — 눈에 보이는 것이 잡혀야 한다. */
     var lastPt = null;
 
-    function pick(mx, my) {
+    /* tol — 집는 반경(px). 커서는 18, 손가락은 넓게 준다.
+       실측 333px 캔버스에 484 개 노드가 들어가므로 너무 넓히면 옆 노드를
+       집는다. 28 은 손끝 폭쯤이고, 겹칠 때는 앞쪽(z 큰) 것을 고른다. */
+    function pick(mx, my, tol) {
+      var T = tol || 18;
       if (lastPt) {
-        var b3 = -1, bd3 = 18 * 18, bz = -1;
+        var b3 = -1, bd3 = T * T, bz = -1;
         for (var q = 0; q < N.length; q++) {
           var pq = lastPt[q];
           var dq = (pq.x - mx) * (pq.x - mx) + (pq.y - my) * (pq.y - my);
@@ -536,7 +555,7 @@
         }
         if (b3 >= 0) return b3;
       }
-      var best = -1, bd = 16 * 16;
+      var best = -1, bd = (T - 2) * (T - 2);
       for (var i = 0; i < N.length; i++) {
         var a = ang0[i] + rot, r = rad0[i] * view.s;
         var px = view.cx + Math.cos(a) * r, py = view.cy + Math.sin(a) * r;
@@ -602,12 +621,29 @@
     }
 
     if (!isHero) {
+      /* 마지막 입력이 손가락이었나. 터치는 pointermove 로 훑을 수가 없고
+         (누른 채 끌면 스크롤이다) 손을 떼면 pointerleave 가 따라오므로,
+         커서와 같은 규칙을 쓰면 판독이 뜨자마자 지워진다. */
+      var coarse = false;
+
+      canvas.addEventListener('pointerdown', function (ev) {
+        coarse = ev.pointerType === 'touch' || ev.pointerType === 'pen';
+      });
       canvas.addEventListener('pointermove', function (ev) {
+        if (ev.pointerType === 'touch') return;   /* 스크롤 중이다 */
+        coarse = false;
         var b = canvas.getBoundingClientRect();
         setHover(pick(ev.clientX - b.left, ev.clientY - b.top));
       });
-      canvas.addEventListener('pointerleave', function () { setHover(-1); });
-      canvas.addEventListener('click', function () {
+      /* 손가락으로 고른 것은 손을 떼도 남는다 — 다음 탭까지 읽을 시간을 준다 */
+      canvas.addEventListener('pointerleave', function () { if (!coarse) setHover(-1); });
+      canvas.addEventListener('click', function (ev) {
+        if (coarse) {
+          /* pointerleave 가 이미 지나갔으므로 좌표로 다시 집는다.
+             빈 곳을 탭하면 -1 이 되어 판독이 닫힌다 — 닫는 방법이 있어야 한다. */
+          var b = canvas.getBoundingClientRect();
+          setHover(pick(ev.clientX - b.left, ev.clientY - b.top, 28));
+        }
         if (hover >= 0 && opts.onSelect) opts.onSelect(info(hover));
       });
     }
